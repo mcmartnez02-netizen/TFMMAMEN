@@ -1,0 +1,13 @@
+<RCC>
+    <qresource>
+        <file>qtquickcontrols2.conf</file>
+        <file>TFMMAMEN.qmlproject</file>
+        <file>TFMMAMEN/Constants.qml</file>
+        <file>TFMMAMEN/EventListModel.qml</file>
+        <file>TFMMAMEN/EventListSimulator.qml</file>
+        <file>TFMMAMEN/qmldir</file>
+        <file>TFMMAMENContent/App.qml</file>
+        <file>TFMMAMENContent/Screen01.ui.qml</file>
+        <file>TFMMAMENContent/TFMMAMEN.ui.ui.qml</file>
+    </qresource>
+</RCC>
