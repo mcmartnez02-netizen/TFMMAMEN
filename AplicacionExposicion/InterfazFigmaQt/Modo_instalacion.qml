@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
+import QtQuick.Shapes
 import QtGraphs
 
 // Pantalla de exposición en modo instalación.
@@ -27,6 +28,24 @@ Rectangle {
     signal exitRequested()
 
     color: "#f2f1f0"
+
+    // ------------------------------------------------------------------
+    // Tipografías
+    // ------------------------------------------------------------------
+    //
+    // Poppins y Manrope vienen en assets/ pero no están instaladas en el
+    // sistema: sin registrarlas, cada `font.family` de esta pantalla caía en
+    // silencio al sans-serif por defecto y el diseño se veía con otra letra.
+    //
+    // Los ficheros Light declaran una familia heredada propia ("Poppins
+    // Light"), pero también la familia tipográfica "Poppins" con su peso; Qt
+    // registra ambas, así que basta con `font.family: "Poppins"` y el
+    // `font.weight` elige la cara correcta. Para añadir otro grosor, basta con
+    // otro FontLoader apuntando al fichero: no hay que tocar los Text.
+    FontLoader { source: Qt.resolvedUrl("assets/poppins/Poppins-Light.ttf") }
+    FontLoader { source: Qt.resolvedUrl("assets/poppins/Poppins-Regular.ttf") }
+    FontLoader { source: Qt.resolvedUrl("assets/manrope/manrope-light.otf") }
+    FontLoader { source: Qt.resolvedUrl("assets/manrope/manrope-regular.otf") }
 
     // ------------------------------------------------------------------
     // Estados de la simulación
@@ -98,6 +117,64 @@ Rectangle {
     // El cambio de estado es un salto seco: el color viaja gradualmente para
     // que la transición se lea como una transición y no como un parpadeo.
     Behavior on accentColor { ColorAnimation { duration: 600 } }
+
+    // ------------------------------------------------------------------
+    // Desplazamiento continuo de la estela
+    // ------------------------------------------------------------------
+    //
+    // El controlador recalcula las x en cada lectura tomando la más reciente
+    // como origen, así que toda la traza salta a la izquierda de golpe una vez
+    // por latido. scrollOffset es lo que le queda por recorrer a ese salto, en
+    // segundos de eje: al llegar una lectura se le resta el salto (con lo que
+    // la traza se dibuja donde estaba, sin discontinuidad) y desde ahí se anima
+    // hasta 0.
+    //
+    // Lo que se desplaza es el dato, no el eje. Mover la ventana del eje sería
+    // más barato —un par de números en vez de repintar la serie— pero arrastra
+    // consigo la rejilla y las etiquetas, que se deslizarían junto a la traza.
+    // Con el eje clavado, la rejilla se queda quieta y sólo corre la línea.
+    property real scrollOffset: 0
+
+    readonly property real windowSpan: controller.windowSize - 1
+    // Ventana visible, fija. Fuente única para el eje y para el polígono del
+    // degradado, que se dibuja a mano y tiene que mapear igual.
+    readonly property real xMin: -windowSpan
+    readonly property real xMax: 0
+
+    // Sin Behavior: la duración se recalcula en cada lectura para que la
+    // velocidad sea constante (un segundo de eje por segundo real). Con una
+    // duración fija, un latido largo dejaría la traza parada y uno corto la
+    // haría dar un tirón.
+    NumberAnimation {
+        id: scrollAnim
+
+        target: modo_instalacion
+        property: "scrollOffset"
+        to: 0
+        easing.type: Easing.Linear
+    }
+
+    // Altura del marcador de la lectura más reciente, en lpm.
+    //
+    // El marcador no viaja con la traza: se queda clavado en x=0 y sólo sube y
+    // baja. Y no hace falta inventarse el recorrido, porque la geometría lo
+    // impone: al empezar el latido la lectura anterior cae justo sobre x=0 y al
+    // terminar lo hace la nueva, así que interpolar linealmente entre sus dos
+    // alturas, y en el mismo tiempo que dura el barrido, deja el punto
+    // exactamente sobre la línea en todo momento.
+    property real markerY: 0
+
+    NumberAnimation {
+        id: markerAnim
+
+        target: modo_instalacion
+        property: "markerY"
+        easing.type: Easing.Linear
+    }
+
+    // Cada fotograma del barrido hay que reposicionar lo que se pinta.
+    onScrollOffsetChanged: modo_instalacion.applyScroll()
+    onMarkerYChanged: modo_instalacion.updateMarker()
 
     // Sombra de la tarjeta. MultiEffect oculta su source, así que la aplicamos
     // sobre un rectángulo fantasma en lugar de sobre la tarjeta real, que tiene
@@ -267,8 +344,13 @@ Rectangle {
             // --- Gráfico ---
             // Único elemento con fillHeight: absorbe todo el espacio sobrante
             // al redimensionar la ventana.
-            GraphsView {
-                id: chart
+            //
+            // El GraphsView no va suelto en la columna sino dentro de este
+            // Item: la propiedad por defecto de GraphsView es `seriesChildren`,
+            // así que cualquier hijo declarado dentro se toma por una serie más
+            // y no llega a dibujarse. El degradado necesita ser un hermano.
+            Item {
+                id: chartArea
 
                 Layout.fillHeight: true
                 Layout.fillWidth: true
@@ -278,82 +360,130 @@ Rectangle {
                 Layout.minimumHeight: card.height * 0.3
                 Layout.topMargin: 24 * modo_instalacion.ui
 
-                antialiasing: true
+                // --- Degradado bajo la estela ---
+                // QtGraphs no sabe rellenar una LineSeries con un degradado:
+                // AreaSeries sólo admite un color plano. Así que el relleno se
+                // dibuja aparte, con la misma lista de puntos que la estela.
+                //
+                // Va declarado antes que el GraphsView para quedar por debajo; como
+                // el fondo del gráfico y el del área de trazado son transparentes,
+                // el degradado asoma y la rejilla y la línea quedan encima.
+                Shape {
+                    id: areaFill
 
-                // El marcador más reciente cae justo sobre x=0; sin esto el
-                // borde del área de trazado lo corta por la mitad.
-                clipPlotArea: false
-                marginRight: 12
+                    anchors.fill: parent
 
-                theme: GraphsTheme {
-                    axisXLabelFont.pointSize: Math.max(7, Math.round(11 * modo_instalacion.ui))
-                    axisYLabelFont.pointSize: Math.max(7, Math.round(11 * modo_instalacion.ui))
-                    backgroundVisible: false
-                    colorScheme: GraphsTheme.ColorScheme.Light
-                    gridVisible: true
-                    labelTextColor: "#696869"
-                    plotAreaBackgroundVisible: false
+                    preferredRendererType: Shape.CurveRenderer
 
-                    grid.mainColor: "#e3e1df"
-                    grid.mainWidth: 1
-                    grid.subColor: "#e3e1df"
+                    ShapePath {
+                        // Negativo = sin trazo: el borde superior ya lo dibuja la
+                        // LineSeries, que además se anima al llegar puntos.
+                        strokeWidth: -1
 
-                    axisX.labelTextColor: "#696869"
-                    axisX.mainColor: "#e3e1df"
-                    axisX.subColor: "#e3e1df"
+                        fillGradient: LinearGradient {
+                            id: areaGradient
 
-                    axisY.labelTextColor: "#696869"
-                    axisY.mainColor: "#e3e1df"
-                    axisY.subColor: "#e3e1df"
+                            // Vertical puro. Los extremos los fija rebuildArea():
+                            // arranca en el punto más alto de la estela y muere en
+                            // la base del área de trazado.
+                            x1: 0
+                            x2: 0
+
+                            GradientStop { position: 0.0; color: Qt.alpha(modo_instalacion.accentColor, 0.35) }
+                            GradientStop { position: 1.0; color: Qt.alpha(modo_instalacion.accentColor, 0.0) }
+                        }
+
+                        PathPolyline { id: areaPolyline }
+                    }
                 }
 
-                // QtGraphs formatea las etiquetas desde un double: %d no vale.
-                axisX: ValueAxis {
-                    id: axisX
+                GraphsView {
+                    id: chart
 
-                    labelFormat: "%.0fs"
-                    max: 0
-                    min: -(controller.windowSize - 1)
-                    subGridVisible: false
-                    subTickCount: 0
-                    tickAnchor: 0
-                    tickInterval: 10
-                }
+                    anchors.fill: parent
 
-                axisY: ValueAxis {
-                    id: axisY
+                    antialiasing: true
 
-                    labelFormat: "%.0f"
-                    max: controller.yMax
-                    min: controller.yMin
-                    subGridVisible: false
-                    subTickCount: 0
-                    tickAnchor: 0
-                    // Un rango de ~70 lpm en 10 en 10 no cabe en un gráfico bajo.
-                    tickInterval: modo_instalacion.ui < 0.6 ? 20 : 10
-                }
+                    // El marcador más reciente cae justo sobre x=0; sin esto el
+                    // borde del área de trazado lo corta por la mitad.
+                    clipPlotArea: false
+                    marginRight: 12
 
-                LineSeries {
-                    id: trail
+                    // El área de trazado sólo existe una vez medido el gráfico, y
+                    // vuelve a moverse en cada redimensionado: el degradado se
+                    // recalcula con ella.
+                    onPlotAreaChanged: modo_instalacion.applyScroll()
 
-                    color: modo_instalacion.accentColor
-                    width: 3
-                }
+                    theme: GraphsTheme {
+                        axisXLabelFont.pointSize: Math.max(7, Math.round(11 * modo_instalacion.ui))
+                        axisYLabelFont.pointSize: Math.max(7, Math.round(11 * modo_instalacion.ui))
+                        backgroundVisible: false
+                        colorScheme: GraphsTheme.ColorScheme.Light
+                        gridVisible: true
+                        labelTextColor: "#696869"
+                        plotAreaBackgroundVisible: false
 
-                // Marca la lectura más reciente; la estela por sí sola no la
-                // distingue. Comparte accentColor con la estela: al cambiar de
-                // estado se tiñe toda la traza, no sólo el tramo nuevo.
-                ScatterSeries {
-                    id: latest
+                        grid.mainColor: "#e3e1df"
+                        grid.mainWidth: 1
+                        grid.subColor: "#e3e1df"
 
-                    pointDelegate: Component {
-                        Rectangle {
-                            border.color: "#ffffff"
-                            border.width: 2
-                            color: modo_instalacion.accentColor
-                            height: 14
-                            radius: 7
-                            width: 14
+                        axisX.labelTextColor: "#696869"
+                        axisX.mainColor: "#e3e1df"
+                        axisX.subColor: "#e3e1df"
+
+                        axisY.labelTextColor: "#696869"
+                        axisY.mainColor: "#e3e1df"
+                        axisY.subColor: "#e3e1df"
+                    }
+
+                    // QtGraphs formatea las etiquetas desde un double: %d no vale.
+                    axisX: ValueAxis {
+                        id: axisX
+
+                        labelFormat: "%.0fs"
+                        max: modo_instalacion.xMax
+                        min: modo_instalacion.xMin
+                        subGridVisible: false
+                        subTickCount: 0
+                        tickAnchor: 0
+                        tickInterval: 10
+                    }
+
+                    axisY: ValueAxis {
+                        id: axisY
+
+                        labelFormat: "%.0f"
+                        max: controller.yMax
+                        min: controller.yMin
+                        subGridVisible: false
+                        subTickCount: 0
+                        tickAnchor: 0
+                        // Un rango de ~70 lpm en 10 en 10 no cabe en un gráfico bajo.
+                        tickInterval: modo_instalacion.ui < 0.6 ? 20 : 10
+                    }
+
+                    LineSeries {
+                        id: trail
+
+                        color: modo_instalacion.accentColor
+                        width: 3
+                    }
+
+                    // Marca la lectura más reciente; la estela por sí sola no la
+                    // distingue. Comparte accentColor con la estela: al cambiar de
+                    // estado se tiñe toda la traza, no sólo el tramo nuevo.
+                    ScatterSeries {
+                        id: latest
+
+                        pointDelegate: Component {
+                            Rectangle {
+                                border.color: "#ffffff"
+                                border.width: 2
+                                color: modo_instalacion.accentColor
+                                height: 14
+                                radius: 7
+                                width: 14
+                            }
                         }
                     }
                 }
@@ -435,13 +565,149 @@ Rectangle {
 
     // `points` es una lista simple, no un modelo: hay que volver a pintar "a mano".
     function redraw() {
+        modo_instalacion.startBeat(controller.points);
+        modo_instalacion.applyScroll();
+        // Por si markerY no ha cambiado de valor (dos lecturas iguales) y su
+        // manejador no ha llegado a dispararse.
+        modo_instalacion.updateMarker();
+    }
+
+    // Vuelca los puntos del controlador en la escena corridos scrollOffset a la
+    // derecha. Se ejecuta en cada fotograma del barrido, así que evita rehacer
+    // las series cuando basta con reemplazar sus puntos: replace() sobre la
+    // lista entera es una sola llamada, mientras que clear() + append() en
+    // bucle son casi doscientas por fotograma.
+    function applyScroll() {
         var pts = controller.points;
-        trail.clear();
-        latest.clear();
-        for (var i = 0; i < pts.length; ++i)
-            trail.append(pts[i].x, pts[i].y);
-        if (pts.length > 0)
-            latest.append(0, pts[0].y);
+        var off = modo_instalacion.scrollOffset;
+
+        // La traza se corta en x=0 y termina en el propio marcador. Si no, el
+        // tramo que está entrando asoma a su derecha, por el margen: línea
+        // dibujada después del "ahora", que además deja el punto colgando en
+        // mitad de la curva en vez de rematándola.
+        //
+        // El remate no hay que calcularlo: markerY ya es, por construcción, el
+        // valor de la línea en x=0.
+        var shifted = [Qt.point(0, modo_instalacion.markerY)];
+        for (var i = 0; i < pts.length; ++i) {
+            var x = pts[i].x - off;
+            if (x < 0)
+                shifted.push(Qt.point(x, pts[i].y));
+        }
+
+        if (trail.count === shifted.length)
+            trail.replace(shifted);
+        else {
+            trail.clear();
+            trail.append(shifted);
+        }
+
+        modo_instalacion.rebuildArea(shifted);
+    }
+
+    // El marcador se queda en x=0 pase lo que pase; sólo le cambia la altura,
+    // que anima markerY. Va aparte de applyScroll() porque las dos animaciones
+    // avanzan por su cuenta y cada una repinta lo suyo.
+    function updateMarker() {
+        if (controller.points.length === 0) {
+            latest.clear();
+            return;
+        }
+
+        if (latest.count === 1)
+            latest.replace(0, 0, modo_instalacion.markerY);
+        else {
+            latest.clear();
+            latest.append(0, modo_instalacion.markerY);
+        }
+    }
+
+    // Relanza el barrido y el ascenso del marcador tras recibir una lectura.
+    function startBeat(pts) {
+        if (pts.length === 0)
+            return;
+
+        scrollAnim.stop();
+        markerAnim.stop();
+
+        // Con una sola lectura no hay latido anterior desde el que interpolar:
+        // el marcador se coloca de golpe y no hay nada que barrer todavía.
+        if (pts.length < 2) {
+            modo_instalacion.markerY = pts[0].y;
+            return;
+        }
+
+        // pts[1] es la lectura que hasta ahora era la más reciente y estaba en
+        // x=0: su nueva x es justo lo que ha encogido la ventana.
+        var shift = -pts[1].x;
+        if (shift <= 0)
+            return;
+
+        // Se resta, no se asigna: si la animación anterior no había terminado,
+        // ese resto sigue pendiente y se arrastra en vez de descartarse, que es
+        // lo que provocaría el tirón. El tope de dos saltos evita que un parón
+        // largo acumule un retraso del que ya no se recupera.
+        modo_instalacion.scrollOffset = Math.max(modo_instalacion.scrollOffset - shift, -2 * shift);
+
+        // Un segundo de eje por segundo real: el eje X está en segundos, así
+        // que la duración en ms es el propio recorrido pendiente por 1000.
+        var duration = Math.max(1, Math.round(-modo_instalacion.scrollOffset * 1000));
+
+        scrollAnim.duration = duration;
+        scrollAnim.start();
+
+        // Misma duración para las dos: es lo que mantiene el marcador pegado a
+        // la línea en lugar de ir por delante o por detrás de ella.
+        markerAnim.to = pts[0].y;
+        markerAnim.duration = duration;
+        markerAnim.start();
+    }
+
+    // Rehace el polígono del degradado: la estela más una bajada recta hasta la
+    // base del área de trazado por los dos extremos.
+    //
+    // Los puntos vienen en unidades de los ejes, no en píxeles, y QtGraphs no
+    // expone ningún mapToPosition en QML; se convierten a mano contra
+    // chart.plotArea, que es el rectángulo real del trazado ya descontados
+    // márgenes y etiquetas.
+    // Recibe los puntos ya corridos por applyScroll(), no los del controlador:
+    // el relleno tiene que viajar pegado a la línea.
+    function rebuildArea(pts) {
+        var pa = chart.plotArea;
+        var xMin = modo_instalacion.xMin;
+        var xSpan = modo_instalacion.xMax - xMin;
+        var ySpan = axisY.max - axisY.min;
+
+        // En el primer pase el gráfico aún no está medido y los ejes pueden
+        // seguir a cero: sin puntos no hay polígono que cerrar.
+        if (pts.length < 2 || pa.width <= 0 || pa.height <= 0 || xSpan <= 0 || ySpan <= 0) {
+            areaPolyline.path = [];
+            return;
+        }
+
+        var bottom = pa.y + pa.height;
+        var top = bottom;
+        var poly = [];
+
+        // `points` llega del más reciente al más antiguo; se recorre al revés
+        // para que el polígono avance de izquierda a derecha.
+        for (var i = pts.length - 1; i >= 0; --i) {
+            var px = pa.x + (pts[i].x - xMin) / xSpan * pa.width;
+            var py = pa.y + (axisY.max - pts[i].y) / ySpan * pa.height;
+            if (py < top)
+                top = py;
+            poly.push(Qt.point(px, py));
+        }
+
+        poly.push(Qt.point(poly[poly.length - 1].x, bottom));
+        poly.push(Qt.point(poly[0].x, bottom));
+        areaPolyline.path = poly;
+
+        // El degradado se ancla a la cresta de la estela, no al borde del área:
+        // si arrancase arriba del todo, el tramo visible ya empezaría medio
+        // desvanecido y el relleno se leería plano.
+        areaGradient.y1 = top;
+        areaGradient.y2 = bottom;
     }
 
 

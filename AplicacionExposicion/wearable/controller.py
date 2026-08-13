@@ -188,7 +188,6 @@ class MonitorController(QObject):
             self._simulator.switch_to(HR_State.ESTRESADO)
 
 
-        print(self._simulator.active_source)
         self.stateChanged.emit()
 
     @Slot()
