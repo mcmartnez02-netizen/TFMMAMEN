@@ -28,6 +28,77 @@ Rectangle {
 
     color: "#f2f1f0"
 
+    // ------------------------------------------------------------------
+    // Estados de la simulación
+    // ------------------------------------------------------------------
+    //
+    // El HeartRateSimulator vive en cuatro estados (HR_State en
+    // wearable/readings.py) y el controlador emite stateChanged cada vez que
+    // cambia. `controller.simulatorState` devuelve el valor del enum como
+    // cadena ("Estresado", "Sensible", ...), que es justo lo que espera el
+    // `state` de un Item: enlazándolo, la señal mueve la pantalla entera.
+    //
+    // Ningún elemento visual mira al controlador directamente. Todos se
+    // enlazan a las cinco propiedades de abajo, y los State sólo tienen que
+    // reescribirlas: así los assets de cada estado quedan juntos en un único
+    // sitio en vez de repartidos en un ternario por cada Text, Image y serie.
+    property color accentColor: "#e59aa8"
+    property string estadoTexto: qsTr("Sereno")
+    property string estadoDescripcion: ""
+    property url orbeSource: Qt.resolvedUrl("assets/container_1.png")
+    property url haloSource: Qt.resolvedUrl("assets/container.png")
+
+    // Sin `state` explícito arriba: los valores por defecto de las propiedades
+    // cubren el arranque, antes de la primera lectura del simulador.
+    state: controller.simulatorState
+
+    states: [
+        State {
+            name: "Estresado"
+            PropertyChanges {
+                modo_instalacion.accentColor: "#d4573f"
+                modo_instalacion.estadoTexto: qsTr("Estresado")
+                modo_instalacion.estadoDescripcion: qsTr("Ritmo acelerado. No se detecta presencia cercana.")
+                modo_instalacion.orbeSource: Qt.resolvedUrl("assets/container_1.png")
+                modo_instalacion.haloSource: Qt.resolvedUrl("assets/container.png")
+            }
+        },
+        State {
+            name: "Sensible"
+            PropertyChanges {
+                modo_instalacion.accentColor: "#e59aa8"
+                modo_instalacion.estadoTexto: qsTr("Sensible")
+                modo_instalacion.estadoDescripcion: qsTr("El ritmo reacciona. Se detecta presencia cercana.")
+                modo_instalacion.orbeSource: Qt.resolvedUrl("assets/container_3.png")
+                modo_instalacion.haloSource: Qt.resolvedUrl("assets/container_2.png")
+            }
+        },
+        State {
+            name: "Relajado"
+            PropertyChanges {
+                modo_instalacion.accentColor: "#7fb69a"
+                modo_instalacion.estadoTexto: qsTr("Relajado")
+                modo_instalacion.estadoDescripcion: qsTr("Ritmo estable. Se detecta presencia cercana.")
+                modo_instalacion.orbeSource: Qt.resolvedUrl("assets/container_5.png")
+                modo_instalacion.haloSource: Qt.resolvedUrl("assets/container_4.png")
+            }
+        },
+        State {
+            name: "Latente"
+            PropertyChanges {
+                modo_instalacion.accentColor: "#8f9ed4"
+                modo_instalacion.estadoTexto: qsTr("Latente")
+                modo_instalacion.estadoDescripcion: qsTr("Ritmo en reposo. No se detecta presencia cercana.")
+                modo_instalacion.orbeSource: Qt.resolvedUrl("assets/container_7.png")
+                modo_instalacion.haloSource: Qt.resolvedUrl("assets/container_6.png")
+            }
+        }
+    ]
+
+    // El cambio de estado es un salto seco: el color viaja gradualmente para
+    // que la transición se lea como una transición y no como un parpadeo.
+    Behavior on accentColor { ColorAnimation { duration: 600 } }
+
     // Sombra de la tarjeta. MultiEffect oculta su source, así que la aplicamos
     // sobre un rectángulo fantasma en lugar de sobre la tarjeta real, que tiene
     // hijos interactivos.
@@ -139,15 +210,15 @@ Rectangle {
                 }                
 
                 Button {
-                    id: exciteButton
-                    objectName: "exciteButton"
-                    text: qsTr("Excitar")
-                    enabled: controller.exciteEnabled
-                    onClicked: controller.excite()
+                    id: relajarButton
+                    objectName: "relajarButton"
+                    text: qsTr("Relajar")
+                    enabled: true
+                    onClicked: controller.detect_presence()
 
                     contentItem: Text {
-                        text: exciteButton.text
-                        color: exciteButton.enabled ? window.textPrimary : "#6b6a65"
+                        text: relajarButton.text
+                        color: relajarButton.enabled ? "#f2f1f0" : "#6b6a65"
                         font.pointSize: 11
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -157,10 +228,37 @@ Rectangle {
                         implicitWidth: 96
                         implicitHeight: 38
                         radius: 6
-                        color: !exciteButton.enabled
+                        color: !relajarButton.enabled
                                 ? "#262523"
-                                : (exciteButton.hovered ? "#414039" : "#33322f")
-                        border.color: exciteButton.enabled ? "#4a4945" : "#33322f"
+                                : (relajarButton.hovered ? "#414039" : "#33322f")
+                        border.color: relajarButton.enabled ? "#4a4945" : "#33322f"
+                        border.width: 1
+                    }
+                }
+
+                Button {
+                    id: estresarButton
+                    objectName: "estresarButton"
+                    text: qsTr("Estresar")
+                    enabled: true
+                    onClicked: controller.presence_leaves()
+
+                    contentItem: Text {
+                        text: estresarButton.text
+                        color: estresarButton.enabled ? "#f2f1f0" : "#6b6a65"
+                        font.pointSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        implicitWidth: 96
+                        implicitHeight: 38
+                        radius: 6
+                        color: !estresarButton.enabled
+                                ? "#262523"
+                                : (estresarButton.hovered ? "#414039" : "#33322f")
+                        border.color: estresarButton.enabled ? "#4a4945" : "#33322f"
                         border.width: 1
                     }
                 }
@@ -238,13 +336,13 @@ Rectangle {
                 LineSeries {
                     id: trail
 
-                    color: controller.excited ? "#d4adbc" : "#e59aa8"
+                    color: modo_instalacion.accentColor
                     width: 3
                 }
 
                 // Marca la lectura más reciente; la estela por sí sola no la
-                // distingue. Sólo este punto se tiñe según el estado, así que
-                // las muestras pasadas nunca se repintan como excitadas.
+                // distingue. Comparte accentColor con la estela: al cambiar de
+                // estado se tiñe toda la traza, no sólo el tramo nuevo.
                 ScatterSeries {
                     id: latest
 
@@ -252,7 +350,7 @@ Rectangle {
                         Rectangle {
                             border.color: "#ffffff"
                             border.width: 2
-                            color: controller.excited ? "#d4adbc" : "#e59aa8"
+                            color: modo_instalacion.accentColor
                             height: 14
                             radius: 7
                             width: 14
@@ -279,7 +377,9 @@ Rectangle {
                     implicitWidth: 110 * modo_instalacion.ui
 
                     // El halo (212x212) es casi el doble que la esfera (110x110)
-                    // y va centrado sobre ella.
+                    // y va centrado sobre ella. Los PNG de cada estado no
+                    // comparten tamaño (212, 248, 277...), así que se fuerza la
+                    // caja de diseño y PreserveAspectFit los encaja dentro.
                     Image {
                         id: container
 
@@ -289,8 +389,7 @@ Rectangle {
                         width: 212 * modo_instalacion.ui
 
                         fillMode: Image.PreserveAspectFit
-                        source: Qt.resolvedUrl(controller.excited ? "assets/container_6.png" 
-                                                                  : "assets/container.png")
+                        source: modo_instalacion.haloSource
                     }
                     Image {
                         id: container_1
@@ -298,8 +397,7 @@ Rectangle {
                         anchors.fill: parent
 
                         fillMode: Image.PreserveAspectFit
-                        source: Qt.resolvedUrl(controller.excited ? "assets/container_7.png"
-                                                                  : "assets/container_1.png")
+                        source: modo_instalacion.orbeSource
                     }
                 }
                 Text {
@@ -307,14 +405,15 @@ Rectangle {
 
                     Layout.alignment: Qt.AlignHCenter
 
-                    color: controller.excited ? "#d4adbc" : "#e59aa8"
+                    color: modo_instalacion.accentColor
                     font.family: "Manrope"
                     font.letterSpacing: -0.16
                     font.pixelSize: Math.round(28 * modo_instalacion.ui)
                     font.weight: Font.Light
                     // controller.stateText es texto de depuración en inglés
-                    // ("Resting"); esta pantalla es de cara al público.
-                    text: controller.excited ? qsTr("Excitado") : qsTr("Sereno")
+                    // ("Resting"); esta pantalla es de cara al público, así que
+                    // el rótulo sale del State y no del controlador.
+                    text: modo_instalacion.estadoTexto
                     textFormat: Text.PlainText
                 }
                 Text {
@@ -327,14 +426,14 @@ Rectangle {
                     font.letterSpacing: -0.16
                     font.pixelSize: Math.round(15 * modo_instalacion.ui)
                     font.weight: Font.Normal
-                    text: qsTr("Ritmo estable. Se detecta presencia cercana.")
+                    text: modo_instalacion.estadoDescripcion
                     textFormat: Text.PlainText
                 }
             }
         }
     }
 
-    // `points` es una lista simple, no un modelo: hay que repintar a mano.
+    // `points` es una lista simple, no un modelo: hay que volver a pintar "a mano".
     function redraw() {
         var pts = controller.points;
         trail.clear();
@@ -344,6 +443,7 @@ Rectangle {
         if (pts.length > 0)
             latest.append(0, pts[0].y);
     }
+
 
     Connections {
         target: controller

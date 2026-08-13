@@ -9,7 +9,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 from wearable.controller import MonitorController
-from wearable.readings import DEFAULT, EXCITADO, HeartRateSimulator, load_bpm_samples
+from wearable.readings import HeartRateSimulator, load_bpm_samples, HR_State
 
 DATA_DIR = Path(__file__).parent / "data"
 QML_FILE = Path(__file__).parent / "wearable" / "qml" / "Main.qml"
@@ -20,11 +20,11 @@ def main() -> int:
     app = QGuiApplication(sys.argv)
 
     sources = {
-        DEFAULT: load_bpm_samples(DATA_DIR / "session.csv"),
-        EXCITADO: load_bpm_samples(DATA_DIR / "exce.csv"),
+        HR_State.ESTRESADO: load_bpm_samples(DATA_DIR / "session.csv"),
+        HR_State.EXCITADO: load_bpm_samples(DATA_DIR / "exce.csv"),
     }
 
-    simulator = HeartRateSimulator(sources, active=DEFAULT)
+    simulator = HeartRateSimulator(sources, state=ESTRESADO)
     controller = MonitorController(simulator)
 
     # A shared y range keeps the excited stretch visibly higher instead of

@@ -8,7 +8,8 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQuick import QQuickView
 
 from wearable.controller import MonitorController
-from wearable.readings import DEFAULT, EXCITADO, HeartRateSimulator, load_bpm_samples
+from wearable.readings import HeartRateSimulator, load_bpm_samples, HR_State
+
 
 DATA_DIR = Path(__file__).parent / "data"
 QML_FILE = Path(__file__).parent / "InterfazFigmaQt" / "Modo_instalacion.qml"
@@ -19,14 +20,16 @@ def main() -> int:
     app = QGuiApplication(sys.argv)
 
     sources = {
-        DEFAULT: load_bpm_samples(DATA_DIR / "session.csv"),
-        EXCITADO: load_bpm_samples(DATA_DIR / "exce.csv"),
+        HR_State.ESTRESADO: load_bpm_samples(DATA_DIR / "estresado.csv"),
+        HR_State.SENSIBLE: load_bpm_samples(DATA_DIR / "sensible.csv"),
+        HR_State.RELAJADO: load_bpm_samples(DATA_DIR/ "relajado.csv"),
+        HR_State.LATENTE: load_bpm_samples(DATA_DIR / "latente.csv")
     }
 
     # Parented to the app so C++ owns them: otherwise Python frees the
     # controller while QML still holds bindings to it and every binding logs a
     # "property of null" TypeError on shutdown.
-    simulator = HeartRateSimulator(sources, active=DEFAULT, parent=app)
+    simulator = HeartRateSimulator(sources, state=HR_State.ESTRESADO, parent=app)
     controller = MonitorController(simulator, parent=app)
 
     # A shared y range keeps the excited stretch visibly higher instead of

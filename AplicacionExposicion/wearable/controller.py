@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 from typing import Tuple
-
 from collections import deque
-
 from PySide6.QtCore import Property, QObject, QPointF, Signal, Slot
-
-from .readings import DEFAULT, EXCITADO, HeartRateSimulator
-
-
+from .readings import HeartRateSimulator, HR_State
 
 class SumBoundedQueue:
     """Clase auxiliar que permite tener una cola de listas o tuplas 
@@ -48,8 +43,9 @@ class MonitorController(QObject):
     bpmChanged = Signal()
     stateTextChanged = Signal()
     exciteEnabledChanged = Signal()
-    excitedChanged = Signal()
+    stateChanged = Signal()
     pointsChanged = Signal()
+    person_present = False
     WINDOW_SIZE = 90
     threshold_to_window =  1 / 1000
     threshold_ms = WINDOW_SIZE / threshold_to_window
@@ -64,7 +60,7 @@ class MonitorController(QObject):
         self._bpm = 0
         self._state_text = "Resting"
         self._excite_enabled = True
-        self._excited = False
+        self._presence_detected = False
         self._points: list[QPointF] = []
         self._y_min = 0
         self._y_max = 0
@@ -86,9 +82,16 @@ class MonitorController(QObject):
     def exciteEnabled(self) -> bool:
         return self._excite_enabled
 
-    @Property(bool, notify=excitedChanged)
-    def excited(self) -> bool:
-        return self._excited
+    @Property(str, notify=stateChanged)
+    def simulatorState(self) -> str:
+        """Estado del simulador como cadena ("Estresado", "Sensible", ...).
+
+        HR_State es un Enum de Python normal, no un tipo registrado en QML: si
+        se expusiera tal cual, QML recibiría un objeto opaco. Devolviendo
+        `.value` el nombre coincide con el `name` de los State de
+        Modo_instalacion.qml, que enlaza esta propiedad a su `state`.
+        """
+        return self._simulator.active_source.value
 
     @Property(list, notify=pointsChanged)
     def points(self) -> list[QPointF]:
@@ -129,27 +132,69 @@ class MonitorController(QObject):
         self.pointsChanged.emit()
 
     @Slot()
-    def excite(self) -> None:
-        """Evento del botón: cambiar de DEFAULT a EXCITADO"""
-        self._simulator.switch_to(EXCITADO)
+    def update_presence(self, presence_detected: bool = False) -> None:
+        """Evento de actualización de estado cuando se dectecta a no una presencia"""
+
+        # Solo actualizar el estado si pasamos de no tener presencia a sí y viceversa
+        if self._presence_detected == presence_detected:
+            return
+
+        self._presence_detected = presence_detected
+        
+        match (self._simulator._state):
+            case HR_State.ESTRESADO:
+                if presence_detected == True:
+                    self._simulator.switch_to(HR_State.SENSIBLE)
+
+            case HR_State.SENSIBLE:
+                if presence_detected == False:
+                    self._simulator.switch_to(HR_State.ESTRESADO)
+
+            case HR_State.RELAJADO:
+                if presence_detected == False:
+                    self._simulator.switch_to(HR_State.LATENTE)
+
+            case HR_State.LATENTE:
+                if presence_detected == True:
+                    self._simulator.switch_to(HR_State.RELAJADO)                    
+                    
+        self.stateChanged.emit()
+        
+        
+        """
+        # TODO: Borrar las señales de:
+        # - exciteEnabledChanged porque el programa ya no funiona así 
+        # - stateTextCahnged : porque ahora hacer funcionalidad dentro de exciteChanged.emit()
 
         self._excite_enabled = False
         self.exciteEnabledChanged.emit()
-        self._excited = True
+        self._presence_detected = True
         self.excitedChanged.emit()
         self._state_text = "Excitado"
         self.stateTextChanged.emit()
+        """
 
-    def _on_source_exhausted(self, name: str) -> None:
+    def _on_source_exhausted(self, state:HR_State) -> None:
         """Evento de fin de lecturas: solo el estado de EXCITADO.
         El estado DEFAULT no cambia."""
-        if name != EXCITADO:
-            return
-        self._simulator.switch_to(DEFAULT)
 
-        self._excite_enabled = True
-        self.exciteEnabledChanged.emit()
-        self._excited = False
-        self.excitedChanged.emit()
-        self._state_text = "Resting"
-        self.stateTextChanged.emit()
+        if state == HR_State.ESTRESADO or state == HR_State.RELAJADO:
+            return
+
+        if state == HR_State.SENSIBLE:
+            self._simulator.switch_to(HR_State.RELAJADO)            
+
+        if state == HR_State.LATENTE:
+            self._simulator.switch_to(HR_State.ESTRESADO)
+
+
+        print(self._simulator.active_source)
+        self.stateChanged.emit()
+
+    @Slot()
+    def detect_presence(self) -> None:
+        self.update_presence(True)
+
+    @Slot()
+    def presence_leaves(self) -> None:
+        self.update_presence(False)
