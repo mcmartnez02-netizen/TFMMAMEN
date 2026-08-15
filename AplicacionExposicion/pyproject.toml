@@ -1,5 +1,12 @@
 [detection]
-near_height = 120
-far_height = 100
+near_height = 120.0
+far_height = 100.0
 confidence_threshold = 0.5
 confidence_keypoint = 0.2 
+
+[detection.scaling_factors]
+nose_ankles    = 1.0
+nose_hips      = 1.97
+shoulders_hips = 2.7
+nose_shoulders = 6.8
+eyes           = 22.25

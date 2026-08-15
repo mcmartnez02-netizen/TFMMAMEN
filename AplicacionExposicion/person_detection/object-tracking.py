@@ -2,13 +2,10 @@
 # Edits to original by Alfredo Marquina Meseguer
 import cv2
 import numpy as np
-from enum import Enum
-
 from ultralytics import YOLO
 from ultralytics.utils.plotting import colors
 from collections import defaultdict
 from pathlib import Path
-import math
 import tomllib
 from body_part import POSE_LINES, calculateHeight
 
@@ -31,7 +28,7 @@ class ObjectTracking:
         assert self.cap.isOpened(), "Error reading video file"
 
         # Video writing module
-        w, h, fps = (
+        self.frame_width, self.frame_height, fps = (
             int(self.cap.get(x)) 
             for x in (
                 cv2.CAP_PROP_FRAME_WIDTH, 
@@ -41,11 +38,11 @@ class ObjectTracking:
             "object-tracking.avi",
             cv2.VideoWriter_fourcc(*"mp4v"),
             fps, 
-            (w, h)
+            (self.frame_width, self.frame_height)
             )
 
         self.track_history = defaultdict(lambda: [])  # Store the track history
-        self.near_people: dict[int, bool] = defaultdict(lambda:[]) # Check if people are near or not
+        self.near_people: dict[int, bool] = defaultdict(bool) # Check if people are near or not
 
         # Display settings
         self.rect_width=2
@@ -134,7 +131,7 @@ class ObjectTracking:
                 print("End of video or failed to read image.")
                 break
 
-            results = self.model.track(im0, persist=True)  # Object tracking
+            results = self.model.track(im0, persist=True, conf = self.conf_detection_threshold)  # Object tracking
 
             if results and len(results) > 0:
                 result = results[0]
@@ -145,17 +142,16 @@ class ObjectTracking:
                     keypoints = result.keypoints.xy.tolist()
                     keypoints_conf = result.keypoints.conf.tolist()
 
-                    if boxes is not None or ids is not None:
-                        for box, id, keypoint, conf in zip(boxes, ids.tolist(), keypoints, keypoints_conf):
-                            if id not in self.near_people.keys():
-                                self.near_people[id] = False
+                    if boxes is not None and ids is not None:
+                        for box, id, k_point, conf in zip(boxes, ids.tolist(), keypoints, keypoints_conf):
                             
-                            keypoint_int = [[int(x), int(y)] for x, y in keypoint]
-                            person_height = calculateHeight(keypoint_int, conf)
+                            keypoint_int = [[int(x), int(y)] for x, y in k_point]
+                            person_height = calculateHeight(k_point, conf)
+                            input(keypoints)
 
-                            if not self.near_people[id] and person_height > self.near_threshold:
+                            if not self.near_people.get(id, False) and person_height > self.near_threshold:
                                 self.near_people[id] = True
-                            elif self.near_people[id] and person_height < self.far_threshold:
+                            elif self.near_people.get(id, False) and person_height < self.far_threshold:
                                 self.near_people[id] = False
                             
                             self.draw_bbox(im0, box, id, person_height, self.near_people[id])
@@ -197,9 +193,6 @@ class ObjectTracking:
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
-            elif key == ord('c'):
-                self.selected_id = None
-                print("Selection cleared")
 
         # Cleanup
         self.cap.release()
@@ -211,6 +204,7 @@ if __name__ == "__main__":
     tracker = ObjectTracking(
         model= MODEL_DIR / "yolo26n-pose.pt",
         #source= SOURCE_FOLDER / "street_walking.mp4",
-        source= 0,
+        source= SOURCE_FOLDER / "person.jpg",
+        #source= 0,
     )
     tracker.run()
