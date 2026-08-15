@@ -15,6 +15,8 @@ DATA_DIR = Path(__file__).parent / "data"
 QML_FILE = Path(__file__).parent / "InterfazFigmaQt" / "Modo_instalacion.qml"
 Y_PADDING = 5
 
+CONFIG_FILE = Path(__file__).parent / "pyproject.toml"
+
 
 def main() -> int:
     app = QGuiApplication(sys.argv)

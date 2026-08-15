@@ -1,0 +1,5 @@
+[detection]
+near_height = 120
+far_height = 100
+confidence_threshold = 0.5
+confidence_keypoint = 0.2 
