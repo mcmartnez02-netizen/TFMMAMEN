@@ -1,0 +1,119 @@
+from pathlib import Path
+import tomllib
+from dataclasses import dataclass
+import functools
+from collections import namedtuple
+from enum import Enum
+
+DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "pyproject.toml"
+
+class BodyPart(Enum):
+    Nose = 0
+    Left_Eye = 1
+    Right_Eye = 2
+    Left_Ear = 3
+    Right_Ear = 4
+    Left_Shoulder = 5
+    Right_Shoulder = 6
+    Left_Elbow = 7
+    Right_Elbow = 8
+    Left_Wrist = 9
+    Right_Wrist = 10
+    Left_Hip = 11
+    Right_Hip = 12
+    Left_Knee = 13
+    Right_Knee = 14
+    Left_Ankle = 15
+    Right_Ankle = 16    
+
+
+POSE_LINES = [(BodyPart.Nose.value, BodyPart.Left_Eye.value, 1),
+                (BodyPart.Nose.value, BodyPart.Right_Eye.value, 1),
+                (BodyPart.Left_Eye.value, BodyPart.Right_Eye.value, 1),
+                (BodyPart.Left_Eye.value, BodyPart.Left_Ear.value, 1),
+                (BodyPart.Right_Eye.value, BodyPart.Right_Ear.value, 1),
+                (BodyPart.Left_Ear.value, BodyPart.Left_Shoulder.value, 1),
+                (BodyPart.Right_Ear.value, BodyPart.Right_Shoulder.value, 1),
+                (BodyPart.Left_Shoulder.value, BodyPart.Right_Shoulder.value, 2),
+                (BodyPart.Left_Shoulder.value, BodyPart.Left_Elbow.value, 2),
+                (BodyPart.Right_Shoulder.value, BodyPart.Right_Elbow.value, 2),
+                (BodyPart.Left_Elbow.value, BodyPart.Left_Wrist.value, 2),
+                (BodyPart.Right_Elbow.value, BodyPart.Right_Wrist.value, 2),
+                (BodyPart.Left_Shoulder.value, BodyPart.Left_Hip.value, 3),
+                (BodyPart.Right_Shoulder.value, BodyPart.Right_Hip.value, 3),
+                (BodyPart.Left_Hip.value, BodyPart.Right_Hip.value, 3),
+                (BodyPart.Left_Hip.value, BodyPart.Left_Knee.value, 5),
+                (BodyPart.Right_Hip.value, BodyPart.Right_Knee.value, 5),
+                (BodyPart.Left_Knee.value, BodyPart.Left_Ankle.value, 5),
+                (BodyPart.Right_Knee.value, BodyPart.Right_Ankle.value, 5)]
+
+DetectionLevel = namedtuple("DetectionLevel", ["name", "top_points", "bottom_points"])
+
+DETECTION_LEVELS: list[DetectionLevel] = [
+    DetectionLevel("nose_ankles", [BodyPart.Nose], [BodyPart.Left_Ankle, BodyPart.Right_Ankle]),
+    DetectionLevel("nose_hips", [BodyPart.Nose], [BodyPart.Left_Hip, BodyPart.Right_Hip]),
+    DetectionLevel("shoulders_hips", [BodyPart.Left_Shoulder, BodyPart.Right_Shoulder], [BodyPart.Left_Hip, BodyPart.Right_Hip]),
+    DetectionLevel("nose_shoulders", [BodyPart.Nose] , [BodyPart.Left_Shoulder, BodyPart.Right_Shoulder]),
+    DetectionLevel("eyes", [BodyPart.Left_Eye], [BodyPart.Right_Eye])
+]
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    near_height: float
+    far_height: float
+    person_confidence: float
+    keypoint_confidence: float
+    time_no_presence: float
+    scaling_factors: dict[str, float]
+
+@functools.lru_cache(maxsize=None)
+def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionConfig:
+    
+    with open(config_path, "rb") as fl:
+        config = tomllib.load(fl)["detection"]           
+
+    factors:dict = config["scaling_factors"]
+    
+    # Comprobación que todos los sacling factor requiridos están presentes.
+    required = {level.name for level in DETECTION_LEVELS}
+    present  = factors.keys()
+    if faltan := required - present:        
+        raise ValueError(f"Faltan factores de escala en {config_path}: {sorted(faltan)}")
+    if sobran := present - required:
+        print(f"Aviso: factores desconocidos ignorados: {sorted(sobran)}")
+    
+    
+    scaling_factors = {}
+    for k, v in factors.items():
+        scaling_factors[k] = float(v)
+        if v <= 0:
+            print(f"Warning: The scaling factor for {k} is {v}. All scaling factors "+
+                  f"have to be greater than zero in order to work properly. Please fix "+
+                  f"this issue in the configuration section [detection.scaling_factors].")
+
+    near_height = float(config["near_height"])
+    far_height  = float(config["far_height"])
+    person_confidence = float(config["confidence_threshold"])
+    keypoint_confidence  = float(config["confidence_keypoint"])
+    time_no_presence = float (config["time_no_presence"])
+    
+    
+    if near_height <= far_height:
+        print(f"Warning: near_height has to be greater than far_height, however right now near_height "+
+                f"is {str(near_height)} and far_height is {str(far_height)}. It is advised to fix this "+
+                f"issue in the configuration, section [detection], in order for the program to work as intended.")
+    
+    return DetectionConfig(near_height, far_height, person_confidence, keypoint_confidence, time_no_presence,  scaling_factors)
+
+
+
+if __name__ == "__main__":
+    a = load_detection_config()
+    print(a.near_height)
+    print(a.far_height)
+    print(a.person_confidence)
+    print(a.keypoint_confidence)
+    print(a.time_no_presence)
+    print(a.scaling_factors)
+    b = load_detection_config()
+    print(a is b)

@@ -3,16 +3,21 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QThread
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQuick import QQuickView
 
+# Local imports
 from wearable.controller import MonitorController
 from wearable.readings import HeartRateSimulator, load_bpm_samples, HR_State
+
+from people_detection import PresenceWorker
 
 
 DATA_DIR = Path(__file__).parent / "data"
 QML_FILE = Path(__file__).parent / "InterfazFigmaQt" / "Modo_instalacion.qml"
+MODEL_DIR = Path(__file__).parent / "people_detection"
+
 Y_PADDING = 5
 
 CONFIG_FILE = Path(__file__).parent / "pyproject.toml"
@@ -59,8 +64,26 @@ def main() -> int:
     view.rootObject().exitRequested.connect(view.close)
     view.show()
 
+    # Ejecución modelo
+    thread = QThread()
+    worker = PresenceWorker(
+        model= MODEL_DIR / "yolo26n-pose.pt",
+        #source= REFERENCES_FOLDER / "street_walking.mp4",        
+        source= 0)
+    worker.moveToThread(thread)
+    thread.started.connect(worker.run)
+    worker.presence_changed.connect(controller.update_presence) 
+    thread.start()
+    
     simulator.start()
-    return app.exec()
+    exit_code = app.exec()
+    
+    worker.stop()
+    thread.quit()
+    if not thread.wait(5000):
+        print("Aviso: el hileo de detección no terminó a timepo", file= sys.stderr)    
+    
+    return exit_code
 
 
 if __name__ == "__main__":
