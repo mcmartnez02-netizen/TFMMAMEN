@@ -1,5 +1,5 @@
-# Original code by Ultralytics
-# Edits to original by Alfredo Marquina Meseguer
+# Class by Alfredo Marquina Meseguer
+# Original code by Ultralytics (Object-traking)
 
 import cv2
 import numpy as np
@@ -7,12 +7,15 @@ from ultralytics import YOLO
 from ultralytics.utils.plotting import colors
 from collections import defaultdict
 from pathlib import Path
-from people_detection.utils import calculateHeight
-from people_detection.config import load_detection_config, POSE_LINES, DetectionConfig
 from PySide6.QtCore import QObject, Signal
 import threading
-
 import time
+
+# Local imports
+from people_detection.utils import calculateHeight
+from people_detection.config import load_detection_config, POSE_LINES, DetectionConfig
+
+
 MODEL_DIR = Path(__file__).parent
 REFERENCES_FOLDER = Path(__file__).parent / "test_references"
 
@@ -246,7 +249,7 @@ class PresenceWorker(QObject):
         cv2.destroyAllWindows()
     
     def stop(self):
-        self._stop.set()          # método Python normal, NO un @Slot
+        self._stop.set()
 
 
 if __name__ == "__main__":

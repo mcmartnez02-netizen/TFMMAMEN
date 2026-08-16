@@ -284,60 +284,6 @@ Rectangle {
                     font.weight: Font.Light
                     text: qsTr("LPS")
                     textFormat: Text.PlainText
-                }                
-
-                Button {
-                    id: relajarButton
-                    objectName: "relajarButton"
-                    text: qsTr("Relajar")
-                    enabled: true
-                    onClicked: controller.detect_presence()
-
-                    contentItem: Text {
-                        text: relajarButton.text
-                        color: relajarButton.enabled ? "#f2f1f0" : "#6b6a65"
-                        font.pointSize: 11
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        implicitWidth: 96
-                        implicitHeight: 38
-                        radius: 6
-                        color: !relajarButton.enabled
-                                ? "#262523"
-                                : (relajarButton.hovered ? "#414039" : "#33322f")
-                        border.color: relajarButton.enabled ? "#4a4945" : "#33322f"
-                        border.width: 1
-                    }
-                }
-
-                Button {
-                    id: estresarButton
-                    objectName: "estresarButton"
-                    text: qsTr("Estresar")
-                    enabled: true
-                    onClicked: controller.presence_leaves()
-
-                    contentItem: Text {
-                        text: estresarButton.text
-                        color: estresarButton.enabled ? "#f2f1f0" : "#6b6a65"
-                        font.pointSize: 11
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        implicitWidth: 96
-                        implicitHeight: 38
-                        radius: 6
-                        color: !estresarButton.enabled
-                                ? "#262523"
-                                : (estresarButton.hovered ? "#414039" : "#33322f")
-                        border.color: estresarButton.enabled ? "#4a4945" : "#33322f"
-                        border.width: 1
-                    }
                 }
             }
 

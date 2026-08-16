@@ -69,7 +69,7 @@ def main() -> int:
     worker = PresenceWorker(
         model= MODEL_DIR / "yolo26n-pose.pt",
         #source= REFERENCES_FOLDER / "street_walking.mp4",        
-        source= 0)
+        source= 0,)
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
     worker.presence_changed.connect(controller.update_presence) 
