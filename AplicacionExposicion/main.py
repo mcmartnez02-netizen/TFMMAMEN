@@ -3,16 +3,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, QThread
+from people_detection import PresenceWorker
+from PySide6.QtCore import QThread, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQuick import QQuickView
 
 # Local imports
 from wearable.controller import MonitorController
-from wearable.readings import HeartRateSimulator, load_bpm_samples, HR_State
-
-from people_detection import PresenceWorker
-
+from wearable.readings import HeartRateSimulator, HR_State, load_bpm_samples
 
 DATA_DIR = Path(__file__).parent / "data"
 QML_FILE = Path(__file__).parent / "InterfazFigmaQt" / "Modo_instalacion.qml"
@@ -67,9 +65,9 @@ def main() -> int:
     # Ejecución modelo
     thread = QThread()
     worker = PresenceWorker(
-        model= MODEL_DIR / "yolo26n-pose_ncnn_model",
+        model_path= MODEL_DIR / "yolo26n-pose_ncnn_model",
         #source= REFERENCES_FOLDER / "street_walking.mp4",        
-        source= 0,)
+        source_path= 0,)
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
     worker.presence_changed.connect(controller.update_presence) 

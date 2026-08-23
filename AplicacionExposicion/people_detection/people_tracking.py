@@ -2,30 +2,19 @@
 # Edits to original by Alfredo Marquina Meseguer
 
 import time
+from pathlib import Path
+
 import cv2
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
-from pathlib import Path
 
 #Local imports 
-from people_detection.utils import calculateHeight, Detection
-from people_detection.config import load_detection_config,  DetectionConfig
+from people_detection.config import DetectionConfig, load_detection_config
 from people_detection.debug_renderer import DebugRenderer
- 
+from people_detection.utils import Detection, calculateHeight, grab_fresh
+
 MODEL_DIR = Path(__file__).parent
 REFERENCES_FOLDER = Path(__file__).parent / "test_references"
-
-def grab_fresh(cap:cv2.VideoCapture, stale_threshold=0.005, max_buffer=8):
-    """Discard buffered frames, decode only the freshest one."""
-    # Suponemos que tamaño de buffer max es default de max_drops
-    for _ in range(max_buffer):
-        t0 = time.monotonic()
-        if not cap.grab():
-            return False, None
-        # Suponemos: Instantaneo -> de buffer y superior a threshold -> reciente
-        if time.monotonic() - t0 > stale_threshold:
-            break                      
-    return cap.retrieve()
 
 class PeopleTracking:
     """Object Tracking using Ultralytics YOLO26: https://docs.ultralytics.com/models/yolo26/"""
@@ -77,7 +66,14 @@ class PeopleTracking:
                 self.presence_near = False
                 # TODO: Aquí se llamaría al controler
     
+    def process_image(self, img:cv2.typing.MatLike) -> list[Detection]:
+        detections =[]
+        results = self.model(img, conf = self.detection_config.person_confidence)           
+        if results and len(results) > 0:                        
+            detections = self.process_results(results[0])                    
+            self._update_presence(detections)
         
+        return detections
     
     def process_results(self, result: Results) -> list[Detection]:
         """Calculamos con el """
@@ -110,19 +106,16 @@ class PeopleTracking:
                     time.sleep(next_frame_at - now)
                     now = time.monotonic()
                 
-                # Get frame
-                #success, im0 = grab_fresh(self.cap)
-                success, im0 = self.cap.read()
+                # NOTE: since we are manually forcing an fps reduction we need 
+                # to empty camera buffer before getting the next frame
+                success, im0 = grab_fresh(self.cap)
+                #success, im0 = self.cap.read()
                 if not success:
                     # TODO: put real logger
                     print("End of video or failed to read image.")
                     break    
                 
-                # Detect people
-                results = self.model(im0, conf = self.detection_config.person_confidence)           
-                if results and len(results) > 0:                        
-                    detections = self.process_results(results[0])                    
-                    self._update_presence(detections)
+                detections = self.process_image(im0)
                     
                 if self.renderer:
                     self.renderer.render(im0, detections, self.presence_near)

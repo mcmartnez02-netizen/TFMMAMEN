@@ -1,9 +1,12 @@
 
 import math
+import time
+import cv2
 from dataclasses import dataclass
 import statistics
 from torch import Tensor
 
+# Local imports
 from people_detection.config import DetectionConfig, DETECTION_LEVELS
 
 def middle_point(points: list[list[int]]) -> tuple[int, int]:
@@ -24,6 +27,19 @@ def calculateHeight(keypoints: list[list[float]], conf:list[float],  config: Det
             scalated_values.append(math.dist(p1, p2) * factor)
 
     return statistics.median(scalated_values) if len(scalated_values) > 0  else None
+
+
+def grab_fresh(cap:cv2.VideoCapture, stale_threshold=0.005, max_buffer=8):
+    """Discard buffered frames, decode only the freshest one."""
+    # Suponemos que tamaño de buffer max es default de max_drops
+    for _ in range(max_buffer):
+        t0 = time.monotonic()
+        if not cap.grab():
+            return False, None
+        # Suponemos: Instantaneo -> de buffer y superior a threshold -> reciente
+        if time.monotonic() - t0 > stale_threshold:
+            break                      
+    return cap.retrieve()
 
 @dataclass
 class Detection:
