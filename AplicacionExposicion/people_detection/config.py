@@ -26,27 +26,6 @@ class BodyPart(Enum):
     Left_Ankle = 15
     Right_Ankle = 16    
 
-
-POSE_LINES = [(BodyPart.Nose.value, BodyPart.Left_Eye.value, 1),
-                (BodyPart.Nose.value, BodyPart.Right_Eye.value, 1),
-                (BodyPart.Left_Eye.value, BodyPart.Right_Eye.value, 1),
-                (BodyPart.Left_Eye.value, BodyPart.Left_Ear.value, 1),
-                (BodyPart.Right_Eye.value, BodyPart.Right_Ear.value, 1),
-                (BodyPart.Left_Ear.value, BodyPart.Left_Shoulder.value, 1),
-                (BodyPart.Right_Ear.value, BodyPart.Right_Shoulder.value, 1),
-                (BodyPart.Left_Shoulder.value, BodyPart.Right_Shoulder.value, 2),
-                (BodyPart.Left_Shoulder.value, BodyPart.Left_Elbow.value, 2),
-                (BodyPart.Right_Shoulder.value, BodyPart.Right_Elbow.value, 2),
-                (BodyPart.Left_Elbow.value, BodyPart.Left_Wrist.value, 2),
-                (BodyPart.Right_Elbow.value, BodyPart.Right_Wrist.value, 2),
-                (BodyPart.Left_Shoulder.value, BodyPart.Left_Hip.value, 3),
-                (BodyPart.Right_Shoulder.value, BodyPart.Right_Hip.value, 3),
-                (BodyPart.Left_Hip.value, BodyPart.Right_Hip.value, 3),
-                (BodyPart.Left_Hip.value, BodyPart.Left_Knee.value, 5),
-                (BodyPart.Right_Hip.value, BodyPart.Right_Knee.value, 5),
-                (BodyPart.Left_Knee.value, BodyPart.Left_Ankle.value, 5),
-                (BodyPart.Right_Knee.value, BodyPart.Right_Ankle.value, 5)]
-
 DetectionLevel = namedtuple("DetectionLevel", ["name", "top_points", "bottom_points"])
 
 DETECTION_LEVELS: list[DetectionLevel] = [
@@ -64,7 +43,8 @@ class DetectionConfig:
     person_confidence: float
     keypoint_confidence: float
     time_no_presence: float
-    scaling_factors: dict[str, float]
+    max_fps: float
+    scaling_factors: dict[str, float]    
 
 @functools.lru_cache(maxsize=None)
 def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionConfig:
@@ -96,6 +76,7 @@ def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionC
     person_confidence = float(config["confidence_threshold"])
     keypoint_confidence  = float(config["confidence_keypoint"])
     time_no_presence = float (config["time_no_presence"])
+    max_fps =  float(config["max_fps"]) 
     
     
     if near_height <= far_height:
@@ -103,7 +84,7 @@ def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionC
                 f"is {str(near_height)} and far_height is {str(far_height)}. It is advised to fix this "+
                 f"issue in the configuration, section [detection], in order for the program to work as intended.")
     
-    return DetectionConfig(near_height, far_height, person_confidence, keypoint_confidence, time_no_presence,  scaling_factors)
+    return DetectionConfig(near_height, far_height, person_confidence, keypoint_confidence, time_no_presence,  max_fps, scaling_factors)
 
 
 

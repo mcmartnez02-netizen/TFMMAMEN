@@ -4,6 +4,12 @@
             "path": "API",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "AplicacionExposicion",
+            "envManager": "ms-python.python:pyenv",
+            "packageManager": "ms-python.python:pip"
         }
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:pyenv"
 }

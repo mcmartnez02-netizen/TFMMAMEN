@@ -4,6 +4,7 @@ far_height = 0.53
 confidence_threshold = 0.5
 confidence_keypoint = 0.2 
 time_no_presence = 10
+max_fps = 1
 
 [detection.scaling_factors]
 nose_ankles    = 1.0

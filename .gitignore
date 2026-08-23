@@ -2,3 +2,7 @@
 /DemoSimuladorLatidos/dist
 DemoSimuladorLatidos/main.spec
 .venv
+*.onnx
+*.ncnn
+.claude
+AplicacionExposicion/people_detection/yolo26n-pose_ncnn_model

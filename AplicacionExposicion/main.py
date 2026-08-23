@@ -67,7 +67,7 @@ def main() -> int:
     # Ejecución modelo
     thread = QThread()
     worker = PresenceWorker(
-        model= MODEL_DIR / "yolo26n-pose.pt",
+        model= MODEL_DIR / "yolo26n-pose_ncnn_model",
         #source= REFERENCES_FOLDER / "street_walking.mp4",        
         source= 0,)
     worker.moveToThread(thread)

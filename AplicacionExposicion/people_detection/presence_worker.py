@@ -13,7 +13,8 @@ import time
 
 # Local imports
 from people_detection.utils import calculateHeight
-from people_detection.config import load_detection_config, POSE_LINES, DetectionConfig
+from people_detection.config import load_detection_config, DetectionConfig
+from people_detection.debug_renderer import POSE_LINES
 
 
 MODEL_DIR = Path(__file__).parent
@@ -23,7 +24,7 @@ class PresenceWorker(QObject):
     """Object Tracking using Ultralytics YOLO26: https://docs.ultralytics.com/models/yolo26/"""
     presence_changed = Signal(bool)
 
-    def __init__(self, model="yolo26n-pose.pt", source="path/to/video.mp4", debug:bool = False, save:bool = False):
+    def __init__(self, model="yolo26n-pose_ncnn_model", source="path/to/video.mp4", debug:bool = False, save:bool = False):
         super().__init__()
 
         self.model = YOLO(model)  # Model initialization
@@ -255,7 +256,7 @@ class PresenceWorker(QObject):
 if __name__ == "__main__":
     # Initialize and run tracker
     tracker = PresenceWorker(
-        model= MODEL_DIR / "yolo26n-pose.pt",
+        model= MODEL_DIR / "yolo26n-pose_ncnn_model",
         #source= REFERENCES_FOLDER / "street_walking.mp4",        
         source= 0,
         debug=True,

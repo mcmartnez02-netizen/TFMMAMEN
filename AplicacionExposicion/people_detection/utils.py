@@ -1,7 +1,10 @@
 
 import math
-from people_detection.config import DetectionConfig, DETECTION_LEVELS
+from dataclasses import dataclass
 import statistics
+from torch import Tensor
+
+from people_detection.config import DetectionConfig, DETECTION_LEVELS
 
 def middle_point(points: list[list[int]]) -> tuple[int, int]:
     if len(points) == 0: return None
@@ -22,6 +25,11 @@ def calculateHeight(keypoints: list[list[float]], conf:list[float],  config: Det
 
     return statistics.median(scalated_values) if len(scalated_values) > 0  else None
 
+@dataclass
+class Detection:
+    box: Tensor
+    keypoints : list[list[float]]
+    height: float | None = None
 
 if __name__ == "__main__":
     #test_keypoints = [[147, 136], [145, 133], [147, 133], [134, 134], [148, 134], [124, 151], [154, 153], [117, 176], [159, 179], [120, 193], [159, 198], [127, 198], [148, 199], [124, 232], [147, 233], [123, 264], [144, 269]]
