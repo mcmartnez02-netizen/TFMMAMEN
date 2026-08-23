@@ -31,7 +31,7 @@ class Heartbeat(BaseModel):
         return v
     
     def __iter__(self):
-        yield from [(k, v) if not type(v) is HB_State else (k, v.value) for (k, v) in self.__dict__.items() if not k.startswith('_')]        
+        yield from [(k, v) if not type(v) is HB_State else (k, v.name) for (k, v) in self.__dict__.items() if not k.startswith('_')]        
         extra = self.__pydantic_extra__
         if extra:
             yield from extra.items()
@@ -69,4 +69,19 @@ class UserRequest(User):
 class UserInDB(User):
     hashed_password: str
 
+class StatsSummary(BaseModel):
+    total : int = Field(ge=0)
+    avg_bpm : float = Field(ge=0.0, le=250)
+    min_bpm : int = Field(ge=0, le=250)
+    max_bpm : int = Field(ge=0, le=250)
+ 
+class StatsState(StatsSummary):
+    state : HB_State
+    percentaje : float = Field(ge=0.0, le=100.0)
+       
+class StatsSummaryState(StatsSummary):
+    state_stats: list[StatsState]
+    
+    
+    
     
