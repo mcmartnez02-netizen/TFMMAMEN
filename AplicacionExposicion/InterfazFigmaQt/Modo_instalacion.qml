@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Shapes
+import QtQuick.Window
 import QtGraphs
 
 // Pantalla de exposición en modo instalación.
@@ -28,6 +29,42 @@ Rectangle {
     signal exitRequested()
 
     color: "#f2f1f0"
+
+    // ------------------------------------------------------------------
+    // Pantalla completa
+    // ------------------------------------------------------------------
+    //
+    // El estado no se guarda aquí: la ventana ya lo sabe. `Window.window` es la
+    // ventana que contiene a este elemento (la QQuickView de main.py), así que
+    // leer su `visibility` evita que la interfaz y la ventana se desincronicen
+    // si el gestor de ventanas cambia el modo por su cuenta (F11 del escritorio,
+    // salir del modo por el borde de pantalla...).
+    readonly property bool fullScreen: Window.window
+                                       && Window.window.visibility === Window.FullScreen
+
+    // En pantalla completa los dos botones desaparecen —no hay marco de ventana
+    // que los acompañe y la instalación se ve limpia—, así que la única salida
+    // es el teclado. Necesita el foco: sin `focus: true` las teclas no llegan a
+    // este elemento.
+    focus: true
+
+    Keys.onPressed: function (event) {
+        if (modo_instalacion.fullScreen
+                && (event.key === Qt.Key_Escape || event.key === Qt.Key_Q)) {
+            modo_instalacion.setFullScreen(false);
+            event.accepted = true;
+        }
+    }
+
+    function setFullScreen(on) {
+        if (!Window.window)
+            return;
+
+        if (on)
+            Window.window.showFullScreen();
+        else
+            Window.window.showNormal();
+    }
 
     // ------------------------------------------------------------------
     // Tipografías
@@ -214,7 +251,11 @@ Rectangle {
         color: "#ffffff"
         radius: 24
 
-        Item {
+        // Botonera de la esquina: pantalla completa y salir, en ese orden. Los
+        // dos se esconden en pantalla completa (se sale con Esc o Q); con
+        // `visible: false` además dejan de recibir el ratón, así que no queda
+        // una zona clicable invisible en la esquina.
+        Row {
             id: grupo_exit
 
             anchors.right: parent.right
@@ -222,25 +263,57 @@ Rectangle {
             anchors.top: parent.top
             anchors.topMargin: 55 * modo_instalacion.ui
 
-            height: multiply.height * modo_instalacion.ui
-            width: multiply.width * modo_instalacion.ui
+            spacing: 18 * modo_instalacion.ui
+            visible: !modo_instalacion.fullScreen
 
-            Multiply {
-                id: multiply
+            Item {
+                id: grupo_fullscreen
 
-                anchors.centerIn: parent
-                opacity: exitArea.containsMouse ? 0.6 : 0.25
-                scale: modo_instalacion.ui
+                height: cube.height * modo_instalacion.ui
+                width: cube.width * modo_instalacion.ui
 
-                Behavior on opacity { NumberAnimation { duration: 120 } }
+                Cube {
+                    id: cube
+
+                    anchors.centerIn: parent
+                    opacity: fullScreenArea.containsMouse ? 0.6 : 0.25
+                    scale: modo_instalacion.ui
+
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+                MouseArea {
+                    id: fullScreenArea
+
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: modo_instalacion.setFullScreen(true)
+                }
             }
-            MouseArea {
-                id: exitArea
 
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: modo_instalacion.exitRequested()
+            Item {
+                id: grupo_salir
+
+                height: multiply.height * modo_instalacion.ui
+                width: multiply.width * modo_instalacion.ui
+
+                Multiply {
+                    id: multiply
+
+                    anchors.centerIn: parent
+                    opacity: exitArea.containsMouse ? 0.6 : 0.25
+                    scale: modo_instalacion.ui
+
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+                MouseArea {
+                    id: exitArea
+
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: modo_instalacion.exitRequested()
+                }
             }
         }
 
@@ -273,7 +346,7 @@ Rectangle {
                 Text {
                     id: textolpm
 
-                    // Baja el "LPS" a la línea base del número en vez de
+                    // Baja el "LPM" a la línea base del número en vez de
                     // centrarlo contra una cifra tres veces más alta.
                     Layout.alignment: Qt.AlignBottom
                     Layout.bottomMargin: 34 * modo_instalacion.ui
@@ -282,7 +355,7 @@ Rectangle {
                     font.family: "Manrope"
                     font.pixelSize: Math.round(70 * modo_instalacion.ui)
                     font.weight: Font.Light
-                    text: qsTr("LPS")
+                    text: qsTr("LPM")
                     textFormat: Text.PlainText
                 }
             }
