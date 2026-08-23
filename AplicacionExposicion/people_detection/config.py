@@ -1,4 +1,5 @@
 import functools
+import logging
 from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum
@@ -8,6 +9,7 @@ import tomllib
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "pyproject.toml"
 
+logger = logging.getLogger()
 
 class BodyPart(Enum):
     Nose = 0
@@ -51,7 +53,6 @@ DETECTION_LEVELS: list[DetectionLevel] = [
     DetectionLevel("eyes", [BodyPart.Left_Eye], [BodyPart.Right_Eye]),
 ]
 
-
 @dataclass(frozen=True)
 class DetectionConfig:
     near_height: float
@@ -63,8 +64,7 @@ class DetectionConfig:
     scaling_factors: dict[str, float]    
     max_consecutive_erros: int = 0
 
-
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionConfig:
 
     with open(config_path, "rb") as fl:
@@ -80,14 +80,14 @@ def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionC
             f"Faltan factores de escala en {config_path}: {sorted(faltan)}"
         )
     if sobran := present - required:
-        print(f"Aviso: factores desconocidos ignorados: {sorted(sobran)}")
+        logger.warning(f"Ignored unknown factors: {sorted(sobran)}")
 
     scaling_factors = {}
     for k, v in factors.items():
         scaling_factors[k] = float(v)
         if v <= 0:
-            print(
-                f"Warning: The scaling factor for {k} is {v}. All scaling factors "
+            logger.warning(
+                f"The scaling factor for {k} is {v}. All scaling factors "
                 + "have to be greater than zero in order to work properly. Please fix "
                 + "this issue in the configuration section [detection.scaling_factors]."
             )
@@ -101,8 +101,8 @@ def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionC
     max_consecutive_erros = int(config["max_consecutive_erros"])
 
     if near_height <= far_height:
-        print(
-            "Warning: near_height has to be greater than far_height, however right now near_height "
+        logger.warning(
+            "near_height has to be greater than far_height, however right now near_height "
             + f"is {near_height!s} and far_height is {far_height!s}. It is advised to fix this "
             + "issue in the configuration, section [detection], in order for the program to work as intended."
         )

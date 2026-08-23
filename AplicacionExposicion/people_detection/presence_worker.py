@@ -1,6 +1,7 @@
 # Class by Alfredo Marquina Meseguer
 # Original code by Ultralytics (Object-traking)
 
+import logging
 import threading
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ from people_detection.utils import Detection, calculateHeight, grab_fresh
 MODEL_DIR = Path(__file__).parent
 REFERENCES_FOLDER = Path(__file__).parent / "test_references"
 
+logger = logging.getLogger()
 
 class PresenceWorker(QObject):
     """Object Tracking using Ultralytics YOLO26: https://docs.ultralytics.com/models/yolo26/"""
@@ -70,6 +72,7 @@ class PresenceWorker(QObject):
             if debug or save
             else None
         )
+        self.debug = debug
 
         # Threading
         self.min_period = 1 / self.detection_config.max_fps
@@ -113,6 +116,7 @@ class PresenceWorker(QObject):
         success, im0 = grab_fresh(self.cap)
         if not success:
             # TODO: put real logger
+            
             print("End of video or failed to read image.")
             return False
 
@@ -134,6 +138,10 @@ class PresenceWorker(QObject):
         if results and len(results) > 0:
             detections = self.process_results(results[0])
             self._update_presence(detections)
+            if self.debug:
+                logger.debug(f"{len(detections)} people detected")
+                for i, detection in  enumerate(detections):
+                    logger.debug(f"Detection {i}, height {detection.height if detection.height is not None else 0.0:.2f}, box {detection.box!s}, keypoints {detection.keypoints!s}")
 
         return detections
 
@@ -184,6 +192,7 @@ class PresenceWorker(QObject):
                 return
 
             if not self.cap.isOpened():
+                logger.warning("End of video or camera closed.")
                 self._finish(False)
                 return
             now = time.monotonic()
@@ -201,9 +210,8 @@ class PresenceWorker(QObject):
             self._consecutive_errors = 0
             remaining = self.min_period - (time.monotonic() - now)
             self.timer.start(max(0, int(remaining * 1000)))
-        except Exception as ex:
-            # TODO: use proper logger
-            print(f"Something went wrong:{ex}")
+        except Exception:
+            logger.exception("Unexpected error processing frame")
             self._finish(False)
 
     def stop(self):

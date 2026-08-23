@@ -1,6 +1,7 @@
 # Original code by Ultralytics
 # Edits to original by Alfredo Marquina Meseguer
 
+import logging
 import time
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from people_detection.utils import Detection, calculateHeight, grab_fresh
 
 MODEL_DIR = Path(__file__).parent
 REFERENCES_FOLDER = Path(__file__).parent / "test_references"
+
+logger = logging.getLogger()
 
 class PeopleTracking:
     """Object Tracking using Ultralytics YOLO26: https://docs.ultralytics.com/models/yolo26/"""
@@ -46,8 +49,7 @@ class PeopleTracking:
         temp_fps = min(self.fps, self.detection_config.max_fps) if self.fps > 0  else self.detection_config.max_fps
         self.renderer = DebugRenderer(self.frame_width, self.frame_height, temp_fps, 
                         output_path, debug, save) if debug or save else None
-
-    
+        self.debug = debug
         
     def _update_presence(self, detections:list[Detection]):
         # NOTE: llamar al controler cada vez que cambia no siempre.
@@ -56,15 +58,15 @@ class PeopleTracking:
             max_height = max(people_heights)
             if not self.presence_near and  max_height > self.detection_config.near_height:
                 self.presence_near = True
-                # TODO: Aquí se llamaría al controler
+                logger.info("Presence change, people detected are near")
             elif self.presence_near and max_height < self.detection_config.far_height:
                 self.presence_near = False
-                # TODO: Aquí se llamaría al controler
+                logger.info("Presence change, people detected are far")
             self.time_no_presence = time.monotonic()
         elif time.monotonic() - self.time_no_presence > self.detection_config.time_no_presence \
             and self.presence_near == True:
                 self.presence_near = False
-                # TODO: Aquí se llamaría al controler
+                logger.info("Presence change, no people detected")
     
     def process_image(self, img:cv2.typing.MatLike) -> list[Detection]:
         detections =[]
@@ -72,6 +74,10 @@ class PeopleTracking:
         if results and len(results) > 0:                        
             detections = self.process_results(results[0])                    
             self._update_presence(detections)
+            if self.debug:
+                logger.debug(f"{len(detections)} people detected")
+                for i, detection in  enumerate(detections):
+                    logger.debug(f"Detection {i}, height {detection.height if detection.height is not None else 0.0:.2f}, box {detection.box!s}, keypoints {detection.keypoints!s}")
         
         return detections
     
@@ -109,10 +115,8 @@ class PeopleTracking:
                 # NOTE: since we are manually forcing an fps reduction we need 
                 # to empty camera buffer before getting the next frame
                 success, im0 = grab_fresh(self.cap)
-                #success, im0 = self.cap.read()
                 if not success:
-                    # TODO: put real logger
-                    print("End of video or failed to read image.")
+                    logger.warning("End of video or failed to read image.")
                     break    
                 
                 detections = self.process_image(im0)
@@ -131,6 +135,7 @@ class PeopleTracking:
             self.cap.release()
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     # Initialize and run tracker
     tracker = PeopleTracking(
         model_path= MODEL_DIR / "yolo26n-pose_ncnn_model",

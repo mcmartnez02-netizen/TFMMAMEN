@@ -1,13 +1,15 @@
 
 import math
-import time
-import cv2
-from dataclasses import dataclass
 import statistics
+import time
+from dataclasses import dataclass
+
+import cv2
 from torch import Tensor
 
 # Local imports
-from people_detection.config import DetectionConfig, DETECTION_LEVELS
+from people_detection.config import DETECTION_LEVELS, DetectionConfig
+
 
 def middle_point(points: list[list[int]]) -> tuple[int, int]:
     if len(points) == 0: return None
@@ -17,7 +19,7 @@ def middle_point(points: list[list[int]]) -> tuple[int, int]:
 
 def calculateHeight(keypoints: list[list[float]], conf:list[float],  config: DetectionConfig) -> float | None:
     conf_bool: list[bool] = [x > config.keypoint_confidence for x in conf]
-    scalated_values : list[float]= list()
+    scalated_values : list[float]= []
     for name, p1_indexes, p2_indexes in DETECTION_LEVELS:
         factor = config.scaling_factors[name]
         p1 = middle_point([keypoints[i.value] for i in p1_indexes if conf_bool[i.value]])
