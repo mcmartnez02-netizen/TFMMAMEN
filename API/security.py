@@ -3,17 +3,19 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-from fastapi import Depends, HTTPException, status, Security
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm,  SecurityScopes
-from pydantic import BaseModel, ValidationError
+
 import jwt
+from api_classes import AvailableScopes, Token, TokenData, User, UserInDB
+from db_functions import get_conn, get_user, get_user_db
+from fastapi import Depends, HTTPException, status
+from fastapi.security import (
+    OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm,
+    SecurityScopes,
+)
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
-from enum import Enum
-
-# Local Imports
-from api_classes import Token, TokenData, User, UserInDB, AvailableScopes
-
+from pydantic import ValidationError
 
 fake_users_db = {
     "johndoe": {
@@ -82,20 +84,18 @@ def get_password_hash(password):
     return password_hash.hash(password)
 
 
-def get_user(db, username: str):
-    if username in db:
-        user_dict = db[username]
-        return UserInDB(**user_dict)
 
-
-def authenticate_user(fake_db, username: str, password: str):
-    user = get_user(fake_db, username)
-    if not user:
-        verify_password(password, DUMMY_HASH)
-        return False
+def authenticate_user(fake_db, username: str, password: str) ->  UserInDB | None:
+    gen = get_conn()
+    conn = next(gen)
     
+    try:
+        user = get_user_db(conn, username)
+    finally:
+        gen.close()
+        
     if not verify_password(password, user.hashed_password):
-        return False    
+        return None    
     
     return user
 
@@ -133,7 +133,15 @@ async def get_current_user(
         token_data = TokenData(scopes=token_scopes, username=username)
     except (InvalidTokenError, ValidationError):
         raise credentials_exception
-    user = get_user(fake_users_db, username=token_data.username)
+    
+    
+    gen = get_conn()
+    conn = next(gen)    
+    try:
+        user = get_user(conn, token_data.username)
+    finally:
+        gen.close()
+
     if user is None:
         raise credentials_exception
     for scope in security_scopes.scopes:

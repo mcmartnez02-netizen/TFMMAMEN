@@ -1,10 +1,11 @@
-import cv2
-from ultralytics.utils.plotting import colors
 from pathlib import Path
 
+import cv2
+from ultralytics.utils.plotting import colors
+
+# Local imports
 from people_detection.config import BodyPart
 from people_detection.utils import Detection
-
 
 POSE_LINES = [(BodyPart.Nose.value, BodyPart.Left_Eye.value, 1),
                 (BodyPart.Nose.value, BodyPart.Right_Eye.value, 1),
@@ -26,7 +27,7 @@ POSE_LINES = [(BodyPart.Nose.value, BodyPart.Left_Eye.value, 1),
                 (BodyPart.Left_Knee.value, BodyPart.Left_Ankle.value, 5),
                 (BodyPart.Right_Knee.value, BodyPart.Right_Ankle.value, 5)]
 
-class DebugRenderer():
+class DebugRenderer:
     
     def __init__(self, frame_width, frame_height, fps, output_path: Path = Path(__file__).parent / "debug_output.avi", show:bool = False, save:bool = False):
         # Video writing module

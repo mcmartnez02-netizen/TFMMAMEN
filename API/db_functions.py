@@ -7,17 +7,18 @@ from api_classes import (
     HB_State,
     Heartbeat,
     HeartbeatBatch,
-    UserRequest,
+    StatsState,
     StatsSummary,
     StatsSummaryState,
-    StatsState,
+    User,
+    UserInDB,
+    UserRequest,
 )
-from security import password_hash
 
 DEFAULT_DB = Path(__file__).parent / "database" / "default.db"
 
 ###########################################
-### Connections ###
+###              CONNECTIONS            ###
 ###########################################
 
 
@@ -27,6 +28,7 @@ def get_conn():
     )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
     finally:
@@ -67,7 +69,7 @@ def init_schema(conn: sqlite3.Connection):
 
 
 ###########################################
-### USERS ###
+###                 USERS               ###
 ###########################################
 
 
@@ -93,8 +95,69 @@ def create_new_user(conn: sqlite3.Connection, user: UserRequest):
         )
 
 
+def get_user(conn: sqlite3.Connection, username: str) -> User | None:
+    # TODO: treat the case where not found
+    request_dict = {"username": username}
+    row = conn.execute(
+        """
+                SELECT username, disabled
+                FROM users
+                WHERE username = :username            
+            """,
+        request_dict,
+    ).fetchone()
+
+    scopes = conn.execute(
+        """
+                SELECT scope
+                FROM user_scopes
+                WHERE username = :username
+            """,
+        request_dict,
+    ).fetchall()
+
+    user = User(
+        username=row[0],
+        disabled=row[1],
+        allowed_scopes=[x[0] for x in scopes],
+    )
+
+    return user
+
+
+def get_user_db(conn: sqlite3.Connection, username: str) -> UserInDB | None:
+    # TODO: treat the case where not found
+    request_dict = {"username": username}
+    row = conn.execute(
+        """
+            SELECT username, hashed_password, disabled
+            FROM users
+            WHERE username = :username            
+        """,
+        request_dict,
+    ).fetchone()
+
+    scopes = conn.execute(
+        """
+            SELECT scope
+            FROM user_scopes
+            WHERE username = :username
+        """,
+        request_dict,
+    ).fetchall()
+
+    user = UserInDB(
+        username=row[0],
+        hashed_password=row[1],
+        disabled=row[2],
+        allowed_scopes=[x[0] for x in scopes],
+    )
+
+    return user
+
+
 ###########################################
-### HEATBEATS ###
+###             HEARTBEATS              ###
 ###########################################
 
 
@@ -115,13 +178,6 @@ def insert_heartbeats(
     return inserted
 
 
-def get_heartbeats_current(
-    conn: sqlite3.Connection, limit: int = 500, offset: int = 0
-) -> HeartbeatBatch:
-    # TODO: just need to know which is the current run and return the heartbeats for it
-    raise NotImplementedError("Not implemented yet")
-
-
 def get_heartbeats(
     conn: sqlite3.Connection, run_id: int, limit: int = 500, offset: int = 0
 ) -> HeartbeatBatch:
@@ -136,7 +192,7 @@ def get_heartbeats(
         {"run_id": run_id, "limit": limit, "offset": offset},
     ).fetchall()
     items = [
-        Heartbeat(device_timestamp=row[0], bpm=row[1], state=row[2], seq=row[3])
+        Heartbeat(device_timestamp=row[0], bpm=row[1], state=HB_State[row[2]], seq=row[3])
         for row in rows
     ]
     return HeartbeatBatch(run_id=run_id, items=items)
@@ -167,28 +223,29 @@ def get_current_run_id(conn: sqlite3.Connection) -> int:
         """
             SELECT COALESCE(MAX(run_id),0) 
             FROM heartbeats;
-        """)
+        """
+    )
     return cursor.fetchone()[0]
 
 
 ###########################################
-### STATS ###
+###                 STATS               ###
 ###########################################
 
 
 def stats_summary(conn: sqlite3.Connection, run_id: int):
-    with conn:
-        row = conn.execute(
-            """
-                SELECT COUNT (*) AS total,
-                    AVG(bpm) AS avg_bpm,
-                    MIN(bpm) AS min_bpm,
-                    MAX(bpm) AS max_bpm
-                FROM heartbeats 
-                WHERE run_id = :run_id
-            """,
-            {"run_id": run_id},
-        ).fetchone()
+    row = conn.execute(
+        """
+            SELECT COUNT (*) AS total,
+                AVG(bpm) AS avg_bpm,
+                MIN(bpm) AS min_bpm,
+                MAX(bpm) AS max_bpm
+            FROM heartbeats 
+            WHERE run_id = :run_id
+        """,
+        {"run_id": run_id},
+    ).fetchone()
+
     return StatsSummary(
         total=int(row[0]),
         avg_bpm=float(row[1]) if row[1] is not None else 0.0,
@@ -199,9 +256,9 @@ def stats_summary(conn: sqlite3.Connection, run_id: int):
 
 def stats_by_state(conn: sqlite3.Connection, run_id: int):
     general = stats_summary(conn, run_id)
-    with conn:
-        rows = conn.execute(
-            """
+
+    rows = conn.execute(
+        """
             SELECT state,
                 COUNT(*) AS count,
                 100.0 * COUNT(*) / SUM(COUNT(*)) OVER () AS pct,
@@ -212,37 +269,29 @@ def stats_by_state(conn: sqlite3.Connection, run_id: int):
             WHERE run_id = :run_id
             GROUP BY state
             ORDER BY count DESC
-            """,
-            {"run_id": run_id},
-        )
-        state_stats = []
-        for r in rows:
-            state = [
-                HB_State(value)
-                for name, value in vars(HB_State).items()
-                if name == r[0]
-            ]
-
-            state_stats.append(
-                StatsState(
-                    state=state[0] if len(state) > 0 else None,
-                    total= int(r[1]) if r[1] is not None else 0,
-                    percentaje=float(r[2]) if r[2] is not None else 0.0,
-                    avg_bpm=float(r[3]) if r[3] is not None else 0.0,
-                    min_bpm=int(r[4]) if r[4] is not None else 0,
-                    max_bpm=int(r[5]) if r[5] is not None else 0,
-                )
+        """,
+        {"run_id": run_id},
+    )
+    state_stats = []
+    for r in rows:
+        state_stats.append(
+            StatsState(
+                state=HB_State[r[0]],
+                total=int(r[1]) if r[1] is not None else 0,
+                percentage=float(r[2]) if r[2] is not None else 0.0,
+                avg_bpm=float(r[3]) if r[3] is not None else 0.0,
+                min_bpm=int(r[4]) if r[4] is not None else 0,
+                max_bpm=int(r[5]) if r[5] is not None else 0,
             )
-            # print(HB_State(r[0]))
-            print(state, r)
-
-        return StatsSummaryState(
-            total=general.total,
-            avg_bpm=general.avg_bpm,
-            min_bpm=general.min_bpm,
-            max_bpm=general.max_bpm,
-            state_stats=state_stats,
         )
+
+    return StatsSummaryState(
+        total=general.total,
+        avg_bpm=general.avg_bpm,
+        min_bpm=general.min_bpm,
+        max_bpm=general.max_bpm,
+        state_stats=state_stats,
+    )
 
 
 def main_test():
@@ -253,33 +302,12 @@ def main_test():
     )
 
     init_schema(conn)
-    """
-    import datetime
-    with conn:        
-        insert_heartbeats(conn,
-                          0,
-                          [Heartbeat(device_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
-                                     bpm=100,
-                                     state=HB_State.ESTRESADO,
-                                     seq=0),
-                            Heartbeat(device_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
-                                     bpm=100,
-                                     state=HB_State.LATENTE,
-                                     seq=1),
-                            Heartbeat(device_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
-                                     bpm=100,
-                                     state=HB_State.RELAJADO,
-                                     seq=2),
-                            Heartbeat(device_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
-                                     bpm=100,
-                                     state=HB_State.SENSIBLE,
-                                     seq=3)])"""
 
-    id = get_current_run_id(conn)
-    print(id)
+    a = get_user_db(conn, "paco")
+    print(a)
 
-    a = stats_by_state(conn, id)
-    print(dict(a))
+    b = stats_by_state(conn, 0)
+    print(b)
 
     conn.commit()
 
