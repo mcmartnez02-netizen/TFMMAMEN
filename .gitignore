@@ -2,7 +2,11 @@
 /DemoSimuladorLatidos/dist
 DemoSimuladorLatidos/main.spec
 .venv
+*/secrets/*
 *.onnx
 *.ncnn
+*.db
 .claude
 AplicacionExposicion/people_detection/yolo26n-pose_ncnn_model
+API/database/*.db
+API/database/default.db
