@@ -15,16 +15,16 @@ from api_classes import (  # Local import
     HeartbeatBatch,
     StatsSummary,
     StatsSummaryState,
+    Token,
+    User,
+    UserRequest,
 )
 from fastapi import Depends, FastAPI, HTTPException, Query, Security
 from fastapi.security import OAuth2PasswordRequestForm
 from security import (
-    Token,
-    User,
     get_current_active_user,
-    get_current_user,
+    get_password_hash,
     get_token,
-    password_hash,
 )  # Local import
 
 
@@ -32,6 +32,7 @@ from security import (
 async def lifespan(app: FastAPI):
     conn = sqlite3.connect(db.DEFAULT_DB)
     db.init_schema(conn)
+    db.admin_seed(conn)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.close()
     yield
@@ -77,21 +78,28 @@ async def user(
 
 @app.post("/user/create")
 def api_user_create(
-    new_user: db.UserRequest,
+    new_user: UserRequest,
     current_user: Annotated[
         User, Security(get_current_active_user, scopes=[AvailableScopes.admin.name])
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
 ) -> dict[str, str]:
-    new_user.password = password_hash.hash(new_user.password)
-    db.create_new_user(conn, new_user)
+    try:
+        db.create_new_user(
+            conn, new_user, get_password_hash(new_user.password.get_secret_value())
+        )
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Username {current_user.username} is already in use. Pick another username.",
+        )
 
     return {"created": "ok"}
 
 
 # Health Check
 @app.get("/status/")
-async def read_system_status(current_user: Annotated[User, Depends(get_current_user)]):
+async def read_system_status():
     return {"status": "ok"}
 
 
@@ -103,22 +111,30 @@ async def read_system_status(current_user: Annotated[User, Depends(get_current_u
 # Hearbeat Upload
 @app.post("/upload")
 def upload(
-    run_id: Annotated[int, Query(ge=0)],
+    run_id: Annotated[int, Query(ge=1)],
     hb_items: list[Heartbeat],
     current_user: Annotated[
         User, Security(get_current_active_user, scopes=[AvailableScopes.write.name])
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
 ):
-
-    n = db.insert_heartbeats(conn, run_id, hb_items)
-    if n < len(hb_items):
+    try:
+        n = db.insert_heartbeats(conn, current_user, run_id, hb_items)
+    except LookupError:
         raise HTTPException(
-            status_code=409,
-            detail=f"Of the {len(hb_items)} uploaded only {n} where uploaded",
+            status_code=404,
+            detail=f"The run with id {run_id} was not reserved yet. \
+            Please reserve your run id before any upload at /new",
+        )
+    except PermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail=f"The run with id {run_id} does not belong to the user \
+                {current_user.username}. Use already reserved run_id by this \
+                user or reserve a new run at /new",
         )
 
-    return {"inserted": n}
+    return {"inserted": n, "received": len(hb_items)}
 
 
 ###########################################
@@ -132,17 +148,9 @@ def new_run(
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
 ) -> dict[str, int]:
-    """Get an ID for a new run. This is calculated by getting the highest current
-        RUN_ID and adding one to it.
-
-    Args:
-        current_user User: User of the required token. The user requires write privileges.
-
-    Returns:
-        dict[str, int]: a JSON with the id
-    """
-    id = db.get_current_run_id(conn)
-    return {"run_id": id + 1}
+    
+    id = db.create_new_run(conn, current_user)
+    return {"run_id": id}
 
 
 ###########################################
@@ -155,26 +163,29 @@ def heartbeats(
         User, Security(get_current_active_user, scopes=[AvailableScopes.read.name])
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
-    run_id: Annotated[int, Query(ge=0)] | Literal["current"] = "current",
+    run_id: Annotated[int, Query(ge=1)] | Literal["current"] = "current",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> HeartbeatBatch:
-    
+
     if run_id == "current":
         run_id = db.get_current_run_id(conn)
-        
+
     batch: db.HeartbeatBatch = db.get_heartbeats(conn, run_id, limit, offset)
     return batch
 
 
-@app.get("/runs/{run_id}/heartbeats/count")
+@app.get("/runs/heartbeats/count")
 def heartbeats_count(
-    run_id: int,
     current_user: Annotated[
         User, Security(get_current_active_user, scopes=[AvailableScopes.read.name])
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
+    run_id: Annotated[int, Query(ge=1)] | Literal["current"] = "current",
 ) -> dict[str, int]:
+
+    if run_id == "current":
+        run_id = db.get_current_run_id(conn)
 
     n_entries = db.count_hearbeats(conn, run_id)
     return {"id": run_id, "entries": n_entries}
@@ -190,7 +201,7 @@ def stat_summary(
     current_user: Annotated[
         User, Security(get_current_active_user, scopes=[AvailableScopes.read.name])
     ],
-    run_id: Annotated[int, Query(ge=0)],
+    run_id: Annotated[int, Query(ge=1)],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
 ) -> StatsSummary:
 
@@ -205,7 +216,7 @@ def stats_states(
         User, Security(get_current_active_user, scopes=[AvailableScopes.read.name])
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
-    run_id: Annotated[int, Query(ge=0)],
+    run_id: Annotated[int, Query(ge=1)],
 ) -> StatsSummaryState:
 
     summary = db.stats_by_state(conn, run_id)

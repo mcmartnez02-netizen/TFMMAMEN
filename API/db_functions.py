@@ -12,8 +12,9 @@ from api_classes import (
     StatsSummaryState,
     User,
     UserInDB,
-    UserRequest,
 )
+from pydantic import SecretStr
+from settings import settings
 
 DEFAULT_DB = Path(__file__).parent / "database" / "default.db"
 
@@ -24,7 +25,9 @@ DEFAULT_DB = Path(__file__).parent / "database" / "default.db"
 
 def get_conn():
     conn = sqlite3.connect(
-        DEFAULT_DB, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
+        DEFAULT_DB,
+        check_same_thread=False,
+        detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
     )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
@@ -38,34 +41,61 @@ def get_conn():
 def init_schema(conn: sqlite3.Connection):
     _STATE_NAMES = ", ".join(f"'{s.name}'" for s in HB_State)
     _SCOPE_NAMES = ", ".join(f"'{s.name}'" for s in AvailableScopes)
-    cursor = conn.cursor()
-    cursor.execute(f"""CREATE TABLE IF NOT EXISTS heartbeats (
-            run_id INT NOT NULL,
-            seq INT NOT NULL,
-            bpm INT NOT NULL,
-            state TEXT NOT NULL CHECK (state IN ({_STATE_NAMES})),
-            device_timestamp TIMESTAMP,        
-            
-            PRIMARY KEY (run_id, seq)
-        )
-    """)
-    conn.commit()
 
-    cursor.execute("""CREATE TABLE IF NOT EXISTS users (
-            username        TEXT PRIMARY KEY,
-            hashed_password TEXT NOT NULL,
-            disabled        INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1))
-        )
-    """)
-    conn.commit()
-    cursor.execute(f"""CREATE TABLE IF NOT EXISTS user_scopes (
-            username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
-            scope    TEXT NOT NULL CHECK (scope IN ({_SCOPE_NAMES})),
-            
-            PRIMARY KEY (username, scope)
-        )
-    """)
-    conn.commit()
+    with conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS users (
+                username        TEXT PRIMARY KEY,
+                hashed_password TEXT NOT NULL,
+                disabled        INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1))
+            )
+        """)
+        conn.execute(f"""CREATE TABLE IF NOT EXISTS user_scopes (
+                username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+                scope    TEXT NOT NULL CHECK (scope IN ({_SCOPE_NAMES})),
+                
+                PRIMARY KEY (username, scope)
+            )
+        """)
+        conn.execute("""CREATE TABLE IF NOT EXISTS runs (
+                run_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE
+            );
+        """)
+        conn.execute(f"""CREATE TABLE IF NOT EXISTS heartbeats (
+                run_id INT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+                seq INT NOT NULL,
+                bpm INT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ({_STATE_NAMES})),
+                device_timestamp TIMESTAMP,        
+                
+                PRIMARY KEY (run_id, seq)
+            )
+        """)
+
+
+def admin_seed(conn: sqlite3.Connection) -> bool:
+
+    row_count = conn.execute(
+        """
+            SELECT COUNT(*)
+            FROM users 
+            WHERE username = :username
+        """,
+        {"username": "admin"},
+    ).fetchone()[0]
+
+    if row_count > 0:
+        return False
+
+    admin_user = User(
+        username="admin",
+        disabled=False,
+        allowed_scopes=list(AvailableScopes),
+    )
+
+    create_new_user(conn, admin_user, settings.db.admin_password_hash)
+
+    return True
 
 
 ###########################################
@@ -73,14 +103,16 @@ def init_schema(conn: sqlite3.Connection):
 ###########################################
 
 
-def create_new_user(conn: sqlite3.Connection, user: UserRequest):
+def create_new_user(conn: sqlite3.Connection, user: User, hashed_password: SecretStr):
     with conn:
+        user_dict = dict(user)
+        user_dict["password"] = hashed_password.get_secret_value()
         conn.execute(
             """
-            INSERT INTO users (username, hashed_password, disabled)
-            VALUES (:username, :password, :disabled)
+                INSERT INTO users (username, hashed_password, disabled)
+                VALUES (:username, :password, :disabled)
             """,
-            dict(user),
+            user_dict,
         )
         scopes = [
             {"username": user.username, "scope": s.name} for s in user.allowed_scopes
@@ -88,45 +120,19 @@ def create_new_user(conn: sqlite3.Connection, user: UserRequest):
 
         conn.executemany(
             """
-            INSERT INTO user_scopes (username, scope)
-            VALUES (:username, :scope)
+                INSERT INTO user_scopes (username, scope)
+                VALUES (:username, :scope)
             """,
             scopes,
         )
 
 
 def get_user(conn: sqlite3.Connection, username: str) -> User | None:
-    # TODO: treat the case where not found
-    request_dict = {"username": username}
-    row = conn.execute(
-        """
-                SELECT username, disabled
-                FROM users
-                WHERE username = :username            
-            """,
-        request_dict,
-    ).fetchone()
-
-    scopes = conn.execute(
-        """
-                SELECT scope
-                FROM user_scopes
-                WHERE username = :username
-            """,
-        request_dict,
-    ).fetchall()
-
-    user = User(
-        username=row[0],
-        disabled=row[1],
-        allowed_scopes=[x[0] for x in scopes],
-    )
-
-    return user
+    u = get_user_db(conn, username)    
+    return User(**u.model_dump(exclude={"hashed_password"})) if u is not None else None
 
 
 def get_user_db(conn: sqlite3.Connection, username: str) -> UserInDB | None:
-    # TODO: treat the case where not found
     request_dict = {"username": username}
     row = conn.execute(
         """
@@ -136,6 +142,9 @@ def get_user_db(conn: sqlite3.Connection, username: str) -> UserInDB | None:
         """,
         request_dict,
     ).fetchone()
+
+    if row is None:
+        return None
 
     scopes = conn.execute(
         """
@@ -162,8 +171,15 @@ def get_user_db(conn: sqlite3.Connection, username: str) -> UserInDB | None:
 
 
 def insert_heartbeats(
-    conn: sqlite3.Connection, run_id: int, items: list[Heartbeat]
+    conn: sqlite3.Connection, current_user: User, run_id: int, items: list[Heartbeat]
 ) -> int:
+    owner = get_run_owner(conn, run_id)
+    if owner is None:
+        raise LookupError("Run id was not registered yet")
+
+    if owner != current_user.username:
+        raise PermissionError("User is not the owner of the uploaded run")
+
     entries = [{**dict(hb), "run_id": run_id} for hb in items]
     with conn:
         cursor = conn.executemany(
@@ -192,7 +208,9 @@ def get_heartbeats(
         {"run_id": run_id, "limit": limit, "offset": offset},
     ).fetchall()
     items = [
-        Heartbeat(device_timestamp=row[0], bpm=row[1], state=HB_State[row[2]], seq=row[3])
+        Heartbeat(
+            device_timestamp=row[0], bpm=row[1], state=HB_State[row[2]], seq=row[3]
+        )
         for row in rows
     ]
     return HeartbeatBatch(run_id=run_id, items=items)
@@ -210,22 +228,57 @@ def count_hearbeats(conn: sqlite3.Connection, run_id: int) -> int:
     return int(cursor.fetchone()[0])
 
 
+###########################################
+###                 RUNS                ###
+###########################################
+
+
 def get_current_run_id(conn: sqlite3.Connection) -> int:
-    """Gets the greates run_id a entry a heartbeat has in the database.
+    """Gets the greatets run_id reserved
 
     Args:
         conn (sqlite3.Connection): connector to the database
 
     Returns:
-        int: biggest run_id in heartbeats table
+        int: run_id reserved
     """
     cursor = conn.execute(
         """
             SELECT COALESCE(MAX(run_id),0) 
-            FROM heartbeats;
+            FROM runs;
         """
     )
     return cursor.fetchone()[0]
+
+
+def create_new_run(conn: sqlite3.Connection, user: User) -> int:
+
+    with conn:
+        cursor = conn.execute(
+            """
+                INSERT INTO runs (username)
+                VALUES (:username)
+            """,
+            {"username": user.username},
+        )
+
+    return int(cursor.lastrowid)
+
+
+def get_run_owner(conn: sqlite3.Connection, run_id: int) -> str | None:
+    row = conn.execute(
+        """
+            SELECT username 
+            FROM runs
+            WHERE run_id = :run_id
+        """,
+        {"run_id": run_id},
+    ).fetchone()
+
+    if row is None:
+        return None
+
+    return str(row[0])
 
 
 ###########################################
@@ -272,7 +325,7 @@ def stats_by_state(conn: sqlite3.Connection, run_id: int):
         """,
         {"run_id": run_id},
     )
-    state_stats = []
+    state_stats: list[StatsState] = []
     for r in rows:
         state_stats.append(
             StatsState(
@@ -284,6 +337,9 @@ def stats_by_state(conn: sqlite3.Connection, run_id: int):
                 max_bpm=int(r[5]) if r[5] is not None else 0,
             )
         )
+
+    seen = {stats.state for stats in state_stats}
+    state_stats += [StatsState(state=s) for s in HB_State if s not in seen]
 
     return StatsSummaryState(
         total=general.total,
@@ -302,14 +358,18 @@ def main_test():
     )
 
     init_schema(conn)
+    admin_seed(conn)
 
-    a = get_user_db(conn, "paco")
-    print(a)
+    rows = conn.execute("""
+                        SELECT * 
+                        FROM users
+                        """).fetchall()
+    print(rows)
+    print(stats_by_state(conn, 0))
 
-    b = stats_by_state(conn, 0)
-    print(b)
-
-    conn.commit()
+    print("users:")
+    for r in rows:
+        print(r)
 
     conn.close()
 

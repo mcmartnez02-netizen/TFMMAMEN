@@ -5,7 +5,7 @@ Classes used by the API
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 
 class AvailableScopes(Enum):
@@ -76,23 +76,23 @@ class User(BaseModel):
 
 
 class UserRequest(User):
-    password: str
+    password: SecretStr
 
 
 class UserInDB(User):
-    hashed_password: str
+    hashed_password: SecretStr
 
 
 class StatsSummary(BaseModel):
-    total: int = Field(ge=0)
-    avg_bpm: float = Field(ge=0.0, le=250)
-    min_bpm: int = Field(ge=0, le=250)
-    max_bpm: int = Field(ge=0, le=250)
+    total: int = Field(ge=0, default=0)
+    avg_bpm: float = Field(ge=0.0, le=250, default=0.0)
+    min_bpm: int = Field(ge=0, le=250, default=0)
+    max_bpm: int = Field(ge=0, le=250, default=0)
 
 
 class StatsState(StatsSummary):
     state: HB_State
-    percentage: float = Field(ge=0.0, le=100.0)
+    percentage: float = Field(ge=0.0, le=100.0, default=0.0)
 
 
 class StatsSummaryState(StatsSummary):
