@@ -91,7 +91,7 @@ def api_user_create(
     except sqlite3.IntegrityError:
         raise HTTPException(
             status_code=409,
-            detail=f"Username {current_user.username} is already in use. Pick another username.",
+            detail=f"Username {new_user.username} is already in use. Pick another username.",
         )
 
     return {"created": "ok"}
@@ -178,7 +178,7 @@ def heartbeats(
 @app.get("/runs/heartbeats/count")
 def heartbeats_count(
     current_user: Annotated[
-        User, Security(get_current_active_user, scopes=[AvailableScopes.read.name])
+        User, Depends(get_current_active_user)
     ],
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
     run_id: Annotated[int, Query(ge=1)] | Literal["current"] = "current",

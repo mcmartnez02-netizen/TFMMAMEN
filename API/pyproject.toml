@@ -8,9 +8,5 @@ dev = [
 # [tool.fastapi]
 # entrypoint = "api.app"
 
-[tool.api.adminseed]
-username = "admin"
-password = "$argon2id$v=19$m=65536,t=3,p=4$V0IiFq2fcRR1rtRr1KzrQA$re0KDjap1wvo0It5l8IWedHqKh+dhIKz/XAGBgZ75KE"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
