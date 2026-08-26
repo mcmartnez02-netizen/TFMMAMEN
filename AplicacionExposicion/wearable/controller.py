@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Tuple
 from collections import deque
+
 from PySide6.QtCore import Property, QObject, QPointF, Signal, Slot
+
 from .readings import HeartRateSimulator, HR_State
+
 
 class SumBoundedQueue:
     """Clase auxiliar que permite tener una cola de listas o tuplas 
@@ -55,7 +57,7 @@ class MonitorController(QObject):
     ) -> None:
         super().__init__(parent)
         self._simulator = simulator
-        self._readings: deque[Tuple[float, float]] = SumBoundedQueue(self.threshold_ms)
+        self._readings: deque[tuple[float, float]] = SumBoundedQueue(self.threshold_ms)
 
         self._bpm = 0
         self._state_text = "Resting"

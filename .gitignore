@@ -16,3 +16,4 @@ AplicacionExposicion/__pycache__/
 .vscode
 .claude
 */uv.lock
+.coverage
