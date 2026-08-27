@@ -1,11 +1,17 @@
+import base64
 import datetime
+import json
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+# from pathlib import Path
 from typing import Any
 
+import dotenv
 import requests
 import tomllib
 from readings import HR_State
@@ -30,39 +36,40 @@ class DataUploader:
         self.api_url: str = config.get("url", None)
         if self.api_url is None:
             raise LookupError(
-                "Value in toml configuration ulr in section [tool.app.api] was not found."
+                "Value in toml configuration url in section [tool.app.api] was not found."
             )
 
         self.upload_rate: int = config.get("upload_rate", 30)
         self.timeout: int = config.get("timeout", 30)
         self.retry_attempts: int = config.get("retry_attempts", 3)
 
-        endpoints_config = config.get("endpoints", None)
+        endpoints_config: dict[str, Any] = config.get("endpoints", None)
         if endpoints_config is None:
             raise LookupError(
                 "Section of toml configuration file not found [tool.app.api.endpoints]"
             )
 
         # Endpoints config
-        self.status_endpoint: str = config.get("status_endpoint", None)
+        self.status_endpoint: str = endpoints_config.get("status_endpoint", None)
+        print(self.status_endpoint)
         if self.status_endpoint is None:
             raise LookupError(
                 "Value in toml configuration status_endpoint in section [tool.app.api.endpoints] was not found."
             )
 
-        self.token_endpoint: str = config.get("token_endpoint", None)
+        self.token_endpoint: str = endpoints_config.get("token_endpoint", None)
         if self.token_endpoint is None:
             raise LookupError(
                 "Value in toml configuration token_endpoint in section [tool.app.api.endpoints] was not found."
             )
 
-        self.upload_endpoint: str = config.get("upload_endpoint", None)
+        self.upload_endpoint: str = endpoints_config.get("upload_endpoint", None)
         if self.upload_endpoint is None:
             raise LookupError(
                 "Value in toml configuration upload_endpoint in section [tool.app.api.endpoints] was not found."
             )
 
-        self.count_endpoint: str = config.get("count_endpoint", None)
+        self.count_endpoint: str = endpoints_config.get("count_endpoint", None)
         if self.count_endpoint is None:
             raise LookupError(
                 "Value in toml configuration count_endpoint in section [tool.app.api.endpoints] was not found."
@@ -82,8 +89,11 @@ class DataUploader:
             )
 
         # Token
-        self.token = None
+        self.token: str = None
+        self.token_type: str = None
         self.token_expire: datetime.datetime = None
+
+        self.lock = threading.Lock()
 
         self._refresh_token()
         self._start_refresh_thread()
@@ -107,6 +117,10 @@ class DataUploader:
         if config_dict is None:
             raise LookupError("Section of configuration file not found: [tool.app]")
 
+        config_dict = config_dict.get("api", None)
+        if config_dict is None:
+            raise LookupError("Section of configuration file not found: [tool.app.api]")
+
         return config_dict
 
     def _refresh_token(self) -> None:
@@ -115,35 +129,96 @@ class DataUploader:
         uploaded: bool = False
         while attempts < self.retry_attempts and not uploaded:
             try:
-                # TODO: check API signature
-                pass
+                payload = {
+                    "grant_type": "password",
+                    "username": self.username,
+                    "password": self.password,
+                    "scope": "",  # Optional, can be omitted if empty
+                }
+                header = {
+                    "accept" : "application/json"
+                }
+
+                response = requests.post(
+                    f"{self.api_url}{self.token_endpoint}",
+                    headers=header,
+                    data=payload,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                response_data : dict[str, Any] = response.json()
+                expiry = self._extract_token_expiry(response_data.get("access_token", ""))
+
+                with self.lock:
+                    self.token = response_data.get("access_token", "")
+                    self.token_type = response_data.get("token_type", "bearer")
+                    self.token_expire = expiry
+                    uploaded =True
             except requests.exceptions.RequestException as e:
                 if attempts <= self.retry_attempts:
                     # TODO: escribir warning
-                    logger.warning()
+                    logger.warning(f"Request exception error: {e}")
                     attempts += 1
                 else:
                     # TODO: escribir error
                     logger.error()
 
-    
+    def _extract_token_expiry(self, token: str) -> datetime.datetime:
+        try:
+            payload = token.split(".")[1]
+            payload += "=" * (4 - len(payload) % 4)
+            decode = base64.urlsafe_b64decode(payload)
+            data:dict[str, Any] = json.loads(decode)
+            if "exp" in data:
+                return datetime.datetime.fromtimestamp(
+                    data.get("exp", 0), datetime.timezone.utc
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error decoding token expiry: {e}")
+
+        return None
+
     def _start_refresh_thread(self) -> None:
-        def refreah_loop():
+        def refresh_loop():
             # TODO: crear
             while True:
-                if self.token_expiry is not None:
+                if self.token_expire is not None:
                     wait_time: float = (
                         self.token_expire - datetime.datetime.now(datetime.timezone.utc)
                     ).total_seconds()
-                    
+
                     if wait_time > 0:
-                        time.sleep(min(30,wait_time))
+                        time.sleep(min(30, wait_time))
                     else:
-                        self._refresh_token()                        
-        
-        # TODO: Aquí poner un thread normal o de QT, la verdad no sé
-        # O a lo mejor utilizar singleshot como en la IA
-        raise NotImplementedError()
+                        self._refresh_token()
+
+        thread = threading.Thread(target=refresh_loop, daemon=True)
+        thread.start()
+
+    def get_hearder(self) -> dict:
+        with self.lock:
+            if not self.token:
+                raise ValueError("No current token")
+            return {
+                "Autorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            }
+
+    # Generic get and post actions
+
+    def get(self, endpoint: str, **kwargs) -> dict:
+        url = f"{self.api_url}{endpoint}"
+        kwargs.setdefault("timeout", self.timeout)
+        response = requests.get(url, headers=self.get_hearder(), **kwargs)
+        response.raise_for_status()
+        return response.json()
+
+    def post(self, endpoint: str, data: dict | None = None, **kwargs) -> dict:
+        url = f"{self.api_url}{endpoint}"
+        kwargs.setdefault("timeout", self.timeout)
+        response = requests.post(url, json=data, headers=self.get_hearder(), **kwargs)
+        response.raise_for_status()
+        return response.json()
 
     def upload(self, state: HR_State, bpm: int):
 
@@ -167,3 +242,14 @@ class DataUploader:
         # el total de entradas introducidas en la API tiene que ser igual a la longitud de la lista de datos a subir
         # Sin embargo, si tras varios intentos no se puede, solo se envía un warning para no bloquear el programa
         raise NotImplementedError()
+
+    def _new_run_id(self):
+        # TODO: llamar a la función /new de la API para crear una nueva
+        # run en la base de datos y obtener su run_id
+        raise NotImplementedError()
+
+
+if __name__ == "__main__":
+    dotenv.load_dotenv(str(Path(__file__).parent.parent / ".env"))
+    uploader = DataUploader(Path(__file__).parent.parent / "pyproject.toml")
+    print(uploader.token)
