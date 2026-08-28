@@ -114,10 +114,8 @@ class PresenceWorker(QObject):
         # NOTE: since we are manually forcing an fps reduction we need
         # to empty camera buffer before getting the next frame
         success, im0 = grab_fresh(self.cap)
-        if not success:
-            # TODO: put real logger
-            
-            print("End of video or failed to read image.")
+        if not success:            
+            logger.info("End of video or failed to read image.")
             return False
 
         detections = self.process_image(im0)
@@ -216,3 +214,4 @@ class PresenceWorker(QObject):
 
     def stop(self):
         self._stop.set()
+        self.timer.stop()

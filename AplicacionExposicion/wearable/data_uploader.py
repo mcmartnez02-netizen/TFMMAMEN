@@ -5,7 +5,7 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 # from pathlib import Path
@@ -14,21 +14,33 @@ from typing import Any
 import dotenv
 import requests
 import tomllib
+from PySide6.QtCore import QObject, QTimer, Signal
 from readings import HR_State
 
 
 @dataclass
 class HeartBeat:
-    device_timestamp: datetime
+    device_timestamp: datetime.datetime
     bpm: int
     state: HR_State
     seq: int
 
 
+class HeartBeatEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if isinstance(obj, HeartBeat):
+            return asdict(obj)
+        if isinstance(obj, HR_State):
+            return obj.value
+        return super().default(obj)
+
+
 logger = logging.getLogger()
 
 
-class DataUploader:
+class DataUploader(QObject):
     def __init__(self, config_path: Path = "pyproject.toml"):
 
         config: dict[str, Any] = self._load_config(config_path)
@@ -51,7 +63,6 @@ class DataUploader:
 
         # Endpoints config
         self.status_endpoint: str = endpoints_config.get("status_endpoint", None)
-        print(self.status_endpoint)
         if self.status_endpoint is None:
             raise LookupError(
                 "Value in toml configuration status_endpoint in section [tool.app.api.endpoints] was not found."
@@ -75,10 +86,16 @@ class DataUploader:
                 "Value in toml configuration count_endpoint in section [tool.app.api.endpoints] was not found."
             )
 
+        self.new_run_endpoint: str = endpoints_config.get("new_run_endpoint", None)
+        if self.new_run_endpoint is None:
+            raise LookupError(
+                "Value in toml configuration new_run_endpoint in section [tool.app.api.endpoints] was not found."
+            )
+
         # Upload options
         self.run_id: int = 0
         self.seq: int = 0
-        self.to_upload: list[dict[str, Any]] = []
+        self.to_upload: list[HeartBeat] = []
 
         # Credentials
         self.username = os.environ.get("UPLOAD_API_USERNAME", None)
@@ -94,6 +111,8 @@ class DataUploader:
         self.token_expire: datetime.datetime = None
 
         self.lock = threading.Lock()
+        self.timer = None  # Dummy, instanciated in run
+        self._stop = threading.Event()
 
         self._refresh_token()
         self._start_refresh_thread()
@@ -124,7 +143,6 @@ class DataUploader:
         return config_dict
 
     def _refresh_token(self) -> None:
-
         attempts: int = 0
         uploaded: bool = False
         while attempts < self.retry_attempts and not uploaded:
@@ -133,11 +151,9 @@ class DataUploader:
                     "grant_type": "password",
                     "username": self.username,
                     "password": self.password,
-                    "scope": "",  # Optional, can be omitted if empty
+                    "scope": ["write"],
                 }
-                header = {
-                    "accept" : "application/json"
-                }
+                header = {"accept": "application/json"}
 
                 response = requests.post(
                     f"{self.api_url}{self.token_endpoint}",
@@ -146,29 +162,30 @@ class DataUploader:
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
-                response_data : dict[str, Any] = response.json()
-                expiry = self._extract_token_expiry(response_data.get("access_token", ""))
+                response_data: dict[str, Any] = response.json()
+                expiry = self._extract_token_expiry(
+                    response_data.get("access_token", "")
+                )
 
                 with self.lock:
                     self.token = response_data.get("access_token", "")
                     self.token_type = response_data.get("token_type", "bearer")
                     self.token_expire = expiry
-                    uploaded =True
+                    uploaded = True
             except requests.exceptions.RequestException as e:
-                if attempts <= self.retry_attempts:
-                    # TODO: escribir warning
-                    logger.warning(f"Request exception error: {e}")
-                    attempts += 1
-                else:
-                    # TODO: escribir error
-                    logger.error()
+                # TODO: escribir warning
+                logger.warning(f"On attempt {attempts}: request exception {e}")
+                attempts += 1
+        
+        if attempts >= self.retry_attempts:
+            logger.error(f"Could not obtain a token after {self.retry_attempts}")
 
     def _extract_token_expiry(self, token: str) -> datetime.datetime:
         try:
             payload = token.split(".")[1]
             payload += "=" * (4 - len(payload) % 4)
             decode = base64.urlsafe_b64decode(payload)
-            data:dict[str, Any] = json.loads(decode)
+            data: dict[str, Any] = json.loads(decode)
             if "exp" in data:
                 return datetime.datetime.fromtimestamp(
                     data.get("exp", 0), datetime.timezone.utc
@@ -178,6 +195,41 @@ class DataUploader:
 
         return None
 
+    def _refresh_timer(self) -> None:
+        if self._stop.is_set():
+            return
+        try:
+            if self.token_expire is None:
+                self._refresh_token()
+                
+            wait_time: float = (
+                    self.token_expire - datetime.datetime.now(datetime.timezone.utc)
+                ).total_seconds()
+            
+            # Refresh if expiration is imminent (within 10 seconds)
+            if wait_time <= 10:
+                self._refresh_token()
+                wait_time: float = (
+                    self.token_expire - datetime.datetime.now(datetime.timezone.utc)
+                ).total_seconds()
+            
+            # Check between one hour or the wait_time minus 10 
+            # to never have a expired token
+            next_check = max(10, min(3600, wait_time - 10))
+            self.timer.start(int(next_check * 1000))
+        except Exception as e:
+            logger.error(f"Unexpected exception in _refresh_timer: {e}. Retry in 30 seconds")
+            self.timer.start(30000)            
+        
+    def _start_refresh_timer(self) -> None:
+        self._stop.clear()
+        # Define Timer
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self._refresh_token)
+
+
+    # TODO: Legacy: delete when QTimer approach works
     def _start_refresh_thread(self) -> None:
         def refresh_loop():
             # TODO: crear
@@ -195,11 +247,16 @@ class DataUploader:
         thread = threading.Thread(target=refresh_loop, daemon=True)
         thread.start()
 
-    def get_hearder(self) -> dict:
+    def stop(self) -> None:
+        self._stop.set()
+        self.timer.stop()
+
+    def get_header(self) -> dict:
         with self.lock:
             if not self.token:
                 raise ValueError("No current token")
             return {
+                "accept": "application/json",
                 "Autorization": f"Bearer {self.token}",
                 "Content-Type": "application/json",
             }
@@ -209,14 +266,14 @@ class DataUploader:
     def get(self, endpoint: str, **kwargs) -> dict:
         url = f"{self.api_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
-        response = requests.get(url, headers=self.get_hearder(), **kwargs)
+        response = requests.get(url, headers=self.get_header(), **kwargs)
         response.raise_for_status()
         return response.json()
 
     def post(self, endpoint: str, data: dict | None = None, **kwargs) -> dict:
         url = f"{self.api_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
-        response = requests.post(url, json=data, headers=self.get_hearder(), **kwargs)
+        response = requests.post(url, data=data, headers=self.get_header(), **kwargs)
         response.raise_for_status()
         return response.json()
 
@@ -237,19 +294,89 @@ class DataUploader:
 
         self.to_upload.clear()
 
-    def _upload(self):
+    def _upload(self) -> bool:
         # TODO: crear una función que suba los datos a la API y compruebe si todos se han subido correctamente,
         # el total de entradas introducidas en la API tiene que ser igual a la longitud de la lista de datos a subir
         # Sin embargo, si tras varios intentos no se puede, solo se envía un warning para no bloquear el programa
-        raise NotImplementedError()
 
-    def _new_run_id(self):
-        # TODO: llamar a la función /new de la API para crear una nueva
-        # run en la base de datos y obtener su run_id
-        raise NotImplementedError()
+        # Check API status
+        status = self.get(self.status_endpoint)
+        total_to_upload = len(self.to_upload)
+
+        # Response model:
+        # { "status" : "ok" }
+        if status.get("status", "") != "ok":
+            return False
+
+        # Response Model:
+        # { "inserted": [1, 2, 3], "received": 1 }
+        attempts = 0
+        while len(self.to_upload) > 0 and attempts < self.retry_attempts:
+            data = {
+                "run_id": self.run_id,
+                "hearbeats": json.dumps(self.to_upload, HeartBeatEncoder),
+            }
+            try:
+                response = self.post(self.upload_endpoint, data=data)
+                hb_uploaded: list[int] = response["inserted"]
+                print(type(hb_uploaded), hb_uploaded)
+                self.to_upload = [
+                    item for item in self.to_upload if item.seq not in hb_uploaded
+                ]
+            except requests.RequestException as e:
+                logger.warning(f"Error uploading hearbeat: {e}")
+            finally:
+                attempts += 1
+
+        if len(self.to_upload) > 0:
+            logger.warning(
+                f"Not all hearbeats could be uploaded to API: those which could be not uploaded where saved for latter attempts {[i.seq for i in self.to_upload]}"
+            )
+            return False
+
+        logger.info(
+            f"Correctly uploaded {total_to_upload} hearbeats in {attempts} attempts"
+        )
+        return True
+
+    def _new_run_id(self) -> bool:
+        # Response model :{ "run_id": 4 }
+        response = self.get(self.new_run_endpoint)
+        self.run_id = response.get("run_id", -1)
+
+        return self.run_id == -1
 
 
 if __name__ == "__main__":
-    dotenv.load_dotenv(str(Path(__file__).parent.parent / ".env"))
+    dotenv.load_dotenv("../.env")
+    dummy = [
+        HeartBeat(
+            device_timestamp=datetime.datetime.now(),
+            bpm=1,
+            state=HR_State.ESTRESADO,
+            seq=1,
+        ),
+        HeartBeat(
+            device_timestamp=datetime.datetime.now(),
+            bpm=123,
+            state=HR_State.ESTRESADO,
+            seq=2,
+        ),
+        HeartBeat(
+            device_timestamp=datetime.datetime.now(),
+            bpm=1278934,
+            state=HR_State.ESTRESADO,
+            seq=3,
+        ),
+        HeartBeat(
+            device_timestamp=datetime.datetime.now(),
+            bpm=23,
+            state=HR_State.ESTRESADO,
+            seq=4,
+        ),
+    ]
+    print(json.dumps(dummy, cls=HeartBeatEncoder))
+
+    """dotenv.load_dotenv(str(Path(__file__).parent.parent / ".env"))
     uploader = DataUploader(Path(__file__).parent.parent / "pyproject.toml")
-    print(uploader.token)
+    print(uploader.token)"""

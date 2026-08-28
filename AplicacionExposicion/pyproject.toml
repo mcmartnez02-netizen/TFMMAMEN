@@ -1,6 +1,6 @@
 [tool.app.api]
 url = "http://127.0.0.1:8000"
-upload_rate = 30
+upload_rate = 4
 timeout = 30
 retry_attempts = 3
 
@@ -9,6 +9,7 @@ token_endpoint = "/token/"
 upload_endpoint = "/upload/"
 count_endpoint = "/runs/heartbeats/count/"
 status_endpoint = "/status/"
+new_run_endpoint = "/new/"
 
 [tool.detection]
 near_height = 0.62
