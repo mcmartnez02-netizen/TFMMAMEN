@@ -14,8 +14,9 @@ from typing import Any
 import dotenv
 import requests
 import tomllib
-from PySide6.QtCore import QObject, QTimer, Signal
-from readings import HR_State
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
+
+from wearable.readings import HR_State
 
 
 @dataclass
@@ -41,7 +42,10 @@ logger = logging.getLogger()
 
 
 class DataUploader(QObject):
-    def __init__(self, config_path: Path = "pyproject.toml"):
+    finished = Signal()
+
+    def __init__(self, config_path: Path = Path(__file__).parent / "pyproject.toml"):
+        super().__init__()
 
         config: dict[str, Any] = self._load_config(config_path)
 
@@ -113,9 +117,6 @@ class DataUploader(QObject):
         self.lock = threading.Lock()
         self.timer = None  # Dummy, instanciated in run
         self._stop = threading.Event()
-
-        self._start_refresh_timer()
-        self._new_run_id()
 
     @staticmethod
     def _load_config(config_path: Path) -> dict[str, Any]:
@@ -223,14 +224,15 @@ class DataUploader(QObject):
             )
             self.timer.start(30000)
 
-    def _start_refresh_timer(self) -> None:
+    def start_object(self) -> None:
         self._stop.clear()
         # Define Timer
-        self.timer = QTimer()
+        self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self._refresh_timer)
 
         self._refresh_timer()
+        self._new_run_id()
 
     # TODO: Legacy: delete when QTimer approach works
     def _start_refresh_thread(self) -> None:
@@ -250,9 +252,14 @@ class DataUploader(QObject):
         thread = threading.Thread(target=refresh_loop, daemon=True)
         thread.start()
 
+    @Slot()
     def stop(self) -> None:
         self._stop.set()
         self.timer.stop()
+
+        if self.to_upload:
+            self._upload()
+        self.finished.emit()
 
     def get_header(self) -> dict:
         with self.lock:
@@ -304,7 +311,11 @@ class DataUploader(QObject):
 
         return None
 
-    def upload(self, state: HR_State, bpm: int):
+    @Slot(str, int)
+    def upload(self, state: HR_State | str, bpm: int):
+
+        if isinstance(state, str):
+            state = HR_State(state)
 
         self.to_upload.append(
             HeartBeat(
@@ -349,7 +360,7 @@ class DataUploader(QObject):
             ]
             response = self.post(
                 self.upload_endpoint, params={"run_id": self.run_id}, data=data
-            )                
+            )
             # Response Model:
             # { "inserted": [1, 2, 3], "received": 1 }
             if response is not None:
@@ -378,7 +389,7 @@ class DataUploader(QObject):
         response = self.get(self.new_run_endpoint)
         self.run_id = response.get("run_id", -1)
 
-        return self.run_id == -1
+        return self.run_id != -1
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 [tool.app.api]
 url = "http://127.0.0.1:8000"
-upload_rate = 4
+upload_rate = 3
 timeout = 30
 retry_attempts = 3
 

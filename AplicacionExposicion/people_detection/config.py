@@ -68,7 +68,7 @@ class DetectionConfig:
 def load_detection_config(config_path: Path = DEFAULT_CONFIG_PATH) -> DetectionConfig:
 
     with open(config_path, "rb") as fl:
-        config = tomllib.load(fl)["detection"]
+        config = tomllib.load(fl)["tool"]["detection"]
 
     factors: dict = config["scaling_factors"]
 

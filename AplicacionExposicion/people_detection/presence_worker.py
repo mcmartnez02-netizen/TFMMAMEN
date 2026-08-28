@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 import cv2
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from ultralytics import YOLO
 from ultralytics.engine.results import Results
 
@@ -212,6 +212,8 @@ class PresenceWorker(QObject):
             logger.exception("Unexpected error processing frame")
             self._finish(False)
 
+    @Slot()
     def stop(self):
         self._stop.set()
         self.timer.stop()
+        self._finish(True)

@@ -136,3 +136,99 @@
 2026-08-23 20:36:52,031 DEBUG    [Dummy-2] root: Detection 0, height 2.67, box tensor([  0.0000,   0.0000, 611.0850, 473.9559]), keypoints [[283.7698974609375, 16.0069580078125], [324.2695007324219, 2.07623291015625], [267.8695983886719, 2.5450897216796875], [385.43084716796875, 56.69960021972656], [244.94168090820312, 53.92829895019531], [472.5054931640625, 197.05755615234375], [211.38951110839844, 202.30523681640625], [554.173095703125, 428.9278564453125], [146.8080596923828, 360.4617919921875], [492.95245361328125, 464.949951171875], [51.355224609375, 394.43328857421875], [412.9993591308594, 480.0], [251.6131591796875, 470.54736328125], [387.9362487792969, 431.04901123046875], [201.99444580078125, 419.22991943359375], [367.80859375, 472.763427734375], [167.1043701171875, 457.62890625]]
 2026-08-23 20:36:52,703 DEBUG    [Dummy-2] root: 1 people detected
 2026-08-23 20:36:52,703 DEBUG    [Dummy-2] root: Detection 0, height 2.94, box tensor([  0.0000,   0.0000, 617.2318, 474.6982]), keypoints [[279.27801513671875, 5.184112548828125], [316.8323974609375, 0.0], [265.38330078125, 0.0], [385.4429626464844, 43.75640869140625], [248.32870483398438, 46.590057373046875], [480.51788330078125, 199.953857421875], [207.69020080566406, 204.64276123046875], [570.4403076171875, 435.5247802734375], [140.75027465820312, 365.000732421875], [515.387939453125, 452.1756591796875], [53.999603271484375, 400.21917724609375], [415.45233154296875, 480.0], [250.81369018554688, 476.97076416015625], [374.6593017578125, 427.65057373046875], [193.58236694335938, 415.2862548828125], [346.02716064453125, 474.60089111328125], [163.152099609375, 456.9019775390625]]
+2026-08-28 18:23:32,086 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:23:32,095 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token/ HTTP/1.1" 307 0
+2026-08-28 18:23:32,173 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token HTTP/1.1" 200 193
+2026-08-28 18:23:32,174 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:23:32,177 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new/ HTTP/1.1" 307 0
+2026-08-28 18:23:32,185 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new HTTP/1.1" 200 13
+2026-08-28 18:24:03,311 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:03,313 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token/ HTTP/1.1" 307 0
+2026-08-28 18:24:03,396 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token HTTP/1.1" 200 193
+2026-08-28 18:24:03,398 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:03,400 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new/ HTTP/1.1" 307 0
+2026-08-28 18:24:03,407 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new HTTP/1.1" 200 13
+2026-08-28 18:24:05,363 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:05,366 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:05,368 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:05,369 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:05,382 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 33
+2026-08-28 18:24:05,383 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:06,858 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:06,861 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:06,863 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:06,865 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:06,878 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 33
+2026-08-28 18:24:06,879 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:08,353 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:08,355 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:08,357 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:08,359 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:08,371 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 33
+2026-08-28 18:24:08,372 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:09,915 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:09,918 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:09,920 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:09,922 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:09,935 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 35
+2026-08-28 18:24:09,936 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:11,416 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:11,419 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:11,420 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:11,422 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:11,434 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 36
+2026-08-28 18:24:11,434 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:12,920 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:12,923 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:12,925 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:12,927 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:12,939 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 36
+2026-08-28 18:24:12,940 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:14,566 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:14,568 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:14,569 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:14,571 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:14,585 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 36
+2026-08-28 18:24:14,585 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:16,616 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:16,618 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:16,619 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:16,622 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:16,635 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 36
+2026-08-28 18:24:16,635 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:24:18,516 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:18,518 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:24:18,519 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:24:18,521 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=23 HTTP/1.1" 307 0
+2026-08-28 18:24:18,533 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=23 HTTP/1.1" 200 36
+2026-08-28 18:24:18,534 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:27:39,103 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:27:39,105 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token/ HTTP/1.1" 307 0
+2026-08-28 18:27:39,185 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token HTTP/1.1" 200 193
+2026-08-28 18:27:39,188 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:27:39,190 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new/ HTTP/1.1" 307 0
+2026-08-28 18:27:39,197 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new HTTP/1.1" 200 13
+2026-08-28 18:27:41,210 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:27:41,212 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:27:41,215 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:27:41,217 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=24 HTTP/1.1" 307 0
+2026-08-28 18:27:41,229 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=24 HTTP/1.1" 200 33
+2026-08-28 18:27:41,230 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:30:46,033 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:46,034 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token/ HTTP/1.1" 307 0
+2026-08-28 18:30:46,111 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /token HTTP/1.1" 200 193
+2026-08-28 18:30:46,113 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:46,115 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new/ HTTP/1.1" 307 0
+2026-08-28 18:30:46,128 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /new HTTP/1.1" 200 13
+2026-08-28 18:30:47,991 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:47,993 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:30:47,995 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:47,996 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=25 HTTP/1.1" 307 0
+2026-08-28 18:30:48,011 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=25 HTTP/1.1" 200 33
+2026-08-28 18:30:48,011 INFO     [Dummy-1] root: Correctly uploaded 3 hearbeats in 1 attempts
+2026-08-28 18:30:49,151 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:49,153 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "GET /status/ HTTP/1.1" 200 15
+2026-08-28 18:30:49,154 DEBUG    [Dummy-1] urllib3.connectionpool: Starting new HTTP connection (1): 127.0.0.1:8000
+2026-08-28 18:30:49,156 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload/?run_id=25 HTTP/1.1" 307 0
+2026-08-28 18:30:49,163 DEBUG    [Dummy-1] urllib3.connectionpool: http://127.0.0.1:8000 "POST /upload?run_id=25 HTTP/1.1" 200 31
+2026-08-28 18:30:49,164 INFO     [Dummy-1] root: Correctly uploaded 2 hearbeats in 1 attempts

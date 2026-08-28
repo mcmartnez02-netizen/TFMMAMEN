@@ -1,18 +1,24 @@
 from __future__ import annotations  # noqa: I001
 
+import dotenv
 import logging
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QUrl
+from PySide6.QtCore import QMetaObject, QThread, QUrl, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQuick import QQuickView
 
 # Local imports
 from logging_setup import setup_logging
 from people_detection import PresenceWorker
-from wearable.controller import MonitorController
-from wearable.readings import HeartRateSimulator, HR_State, load_bpm_samples
+from wearable import (
+    MonitorController,
+    HeartRateSimulator,
+    HR_State,
+    load_bpm_samples,
+    DataUploader
+)
 
 setup_logging()
 
@@ -68,26 +74,50 @@ def main() -> int:
     view.show()
 
     # Ejecución modelo
-    thread = QThread()
+    ai_thread = QThread()
     worker = PresenceWorker(
         model_path= MODEL_DIR / "yolo26n-pose_ncnn_model",
         #source= REFERENCES_FOLDER / "street_walking.mp4",        
         source_path= 0)
-    worker.moveToThread(thread)
-    thread.started.connect(worker.run)
-    worker.presence_changed.connect(controller.update_presence) 
-    thread.start()
     
+    api_thread = QThread()
+    uploader = DataUploader(
+        Path(__file__).parent / "pyproject.toml"
+    )
+    
+    worker.moveToThread(ai_thread)
+    uploader.moveToThread(api_thread)
+    
+    ai_thread.started.connect(worker.run)
+    api_thread.finished.connect(worker.stop)
+    
+    api_thread.started.connect(uploader.start_object)
+    api_thread.finished.connect(uploader.stop)    
+    
+    worker.presence_changed.connect(controller.update_presence) 
+    controller.reading_ready.connect(uploader.upload)
+    
+    ai_thread.start()
+    api_thread.start()    
     simulator.start()
     exit_code = app.exec()
     
-    worker.stop()
-    thread.quit()
-    if not thread.wait(5000):
-        print("Aviso: el hileo de detección no terminó a timepo", file= sys.stderr)    
+    QMetaObject.invokeMethod(worker, "stop", Qt.BlockingQueuedConnection)
+    QMetaObject.invokeMethod(uploader, "stop", Qt.BlockingQueuedConnection)
+    #worker.stop()
+    #uploader.stop()
+    
+    ai_thread.quit()
+    api_thread.quit()
+    if not ai_thread.wait(5000):
+        logger.warning("The AI detection thread did not finish in time")        
+    
+    if not api_thread.wait(5000):
+        logger.warning("The API thread did not finish in time")
     
     return exit_code
 
 
 if __name__ == "__main__":
+    dotenv.load_dotenv(".env")
     sys.exit(main())

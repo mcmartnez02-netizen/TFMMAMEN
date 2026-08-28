@@ -6,16 +6,17 @@ from collections import deque
 
 from PySide6.QtCore import Property, QObject, QPointF, Signal, Slot
 
-from .readings import HeartRateSimulator, HR_State
+from wearable.readings import HeartRateSimulator, HR_State
 
 
 class SumBoundedQueue:
-    """Clase auxiliar que permite tener una cola de listas o tuplas 
+    """Clase auxiliar que permite tener una cola de listas o tuplas
     cuyo primer elemento puede sumar como maximo un umbral"""
-    # NOTA: implementamos esto para tener una lista de elementos que 
+
+    # NOTA: implementamos esto para tener una lista de elementos que
     # se puedan representar dentro del grafico, es decir, que solo tengan
     # los elementos de los últimos N milisegundos (en nuestro caso 30 segundos)
-    
+
     def __init__(self, threshold):
         self.threshold = threshold
         self.items = deque()
@@ -26,16 +27,16 @@ class SumBoundedQueue:
         self.total += item[0]
         while self.total > self.threshold and self.items:
             self.total -= self.items.popleft()[0]
-    
+
     def __len__(self):
         return len(self.items)
-    
+
     def __iter__(self):
         return iter(self.items)
-    
+
     def __reversed__(self):
         return reversed(self.items)
-    
+
     def __getitem__(self, key):
         # Nota: no permite slice solo int
         return self.items[key]
@@ -47,9 +48,11 @@ class MonitorController(QObject):
     exciteEnabledChanged = Signal()
     stateChanged = Signal()
     pointsChanged = Signal()
+    reading_ready = Signal(str, int)
+
     person_present = False
     WINDOW_SIZE = 90
-    threshold_to_window =  1 / 1000
+    threshold_to_window = 1 / 1000
     threshold_ms = WINDOW_SIZE / threshold_to_window
 
     def __init__(
@@ -118,20 +121,22 @@ class MonitorController(QObject):
 
     # ---------- events ----------
 
-    def _on_reading_ready(self, rr:float, bpm:float) -> None:        
+    def _on_reading_ready(self, rr: float, bpm: float) -> None:
         self._readings.push((rr, bpm))
 
         self._bpm = bpm
         self.bpmChanged.emit()
 
         # Newest sample sits at x=0; the trail extends left into the past.
-        
-        newest = self._readings[len(self._readings)-1][0]
+
+        newest = self._readings[len(self._readings) - 1][0]
         self._points = [
-            QPointF((newest:=newest - rr) * self.threshold_to_window, value) for rr, value in reversed(self._readings)
+            QPointF((newest := newest - rr) * self.threshold_to_window, value)
+            for rr, value in reversed(self._readings)
         ]
-                
+    
         self.pointsChanged.emit()
+        self.reading_ready.emit(self.simulatorState, bpm)
 
     @Slot()
     def update_presence(self, presence_detected: bool = False) -> None:
@@ -142,8 +147,8 @@ class MonitorController(QObject):
             return
 
         self._presence_detected = presence_detected
-        
-        match (self._simulator._state):
+
+        match self._simulator._state:
             case HR_State.ESTRESADO:
                 if presence_detected == True:
                     self._simulator.switch_to(HR_State.SENSIBLE)
@@ -158,25 +163,11 @@ class MonitorController(QObject):
 
             case HR_State.LATENTE:
                 if presence_detected == True:
-                    self._simulator.switch_to(HR_State.RELAJADO)                    
-                    
+                    self._simulator.switch_to(HR_State.RELAJADO)
+
         self.stateChanged.emit()
-        
-        
-        """
-        # TODO: Borrar las señales de:
-        # - exciteEnabledChanged porque el programa ya no funiona así 
-        # - stateTextCahnged : porque ahora hacer funcionalidad dentro de exciteChanged.emit()
 
-        self._excite_enabled = False
-        self.exciteEnabledChanged.emit()
-        self._presence_detected = True
-        self.excitedChanged.emit()
-        self._state_text = "Excitado"
-        self.stateTextChanged.emit()
-        """
-
-    def _on_source_exhausted(self, state:HR_State) -> None:
+    def _on_source_exhausted(self, state: HR_State) -> None:
         """Evento de fin de lecturas: solo el estado de EXCITADO.
         El estado DEFAULT no cambia."""
 
@@ -184,11 +175,10 @@ class MonitorController(QObject):
             return
 
         if state == HR_State.SENSIBLE:
-            self._simulator.switch_to(HR_State.RELAJADO)            
+            self._simulator.switch_to(HR_State.RELAJADO)
 
         if state == HR_State.LATENTE:
             self._simulator.switch_to(HR_State.ESTRESADO)
-
 
         self.stateChanged.emit()
 
