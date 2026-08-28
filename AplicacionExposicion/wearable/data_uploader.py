@@ -114,8 +114,8 @@ class DataUploader(QObject):
         self.timer = None  # Dummy, instanciated in run
         self._stop = threading.Event()
 
-        self._refresh_token()
-        self._start_refresh_thread()
+        self._start_refresh_timer()
+        self._new_run_id()
 
     @staticmethod
     def _load_config(config_path: Path) -> dict[str, Any]:
@@ -171,12 +171,12 @@ class DataUploader(QObject):
                     self.token = response_data.get("access_token", "")
                     self.token_type = response_data.get("token_type", "bearer")
                     self.token_expire = expiry
-                    uploaded = True
+                uploaded = True
             except requests.exceptions.RequestException as e:
                 # TODO: escribir warning
                 logger.warning(f"On attempt {attempts}: request exception {e}")
                 attempts += 1
-        
+
         if attempts >= self.retry_attempts:
             logger.error(f"Could not obtain a token after {self.retry_attempts}")
 
@@ -201,33 +201,36 @@ class DataUploader(QObject):
         try:
             if self.token_expire is None:
                 self._refresh_token()
-                
+
             wait_time: float = (
-                    self.token_expire - datetime.datetime.now(datetime.timezone.utc)
-                ).total_seconds()
-            
+                self.token_expire - datetime.datetime.now(datetime.timezone.utc)
+            ).total_seconds()
+
             # Refresh if expiration is imminent (within 10 seconds)
             if wait_time <= 10:
                 self._refresh_token()
                 wait_time: float = (
                     self.token_expire - datetime.datetime.now(datetime.timezone.utc)
                 ).total_seconds()
-            
-            # Check between one hour or the wait_time minus 10 
+
+            # Check between one hour or the wait_time minus 10
             # to never have a expired token
             next_check = max(10, min(3600, wait_time - 10))
             self.timer.start(int(next_check * 1000))
         except Exception as e:
-            logger.error(f"Unexpected exception in _refresh_timer: {e}. Retry in 30 seconds")
-            self.timer.start(30000)            
-        
+            logger.error(
+                f"Unexpected exception in _refresh_timer: {e}. Retry in 30 seconds"
+            )
+            self.timer.start(30000)
+
     def _start_refresh_timer(self) -> None:
         self._stop.clear()
         # Define Timer
-        self.timer = QTimer(self)
+        self.timer = QTimer()
         self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self._refresh_token)
+        self.timer.timeout.connect(self._refresh_timer)
 
+        self._refresh_timer()
 
     # TODO: Legacy: delete when QTimer approach works
     def _start_refresh_thread(self) -> None:
@@ -257,25 +260,49 @@ class DataUploader(QObject):
                 raise ValueError("No current token")
             return {
                 "accept": "application/json",
-                "Autorization": f"Bearer {self.token}",
+                "Authorization": f"Bearer {self.token}",
                 "Content-Type": "application/json",
             }
 
     # Generic get and post actions
 
-    def get(self, endpoint: str, **kwargs) -> dict:
+    def get(
+        self, endpoint: str, params: dict[str, Any] | None = None, **kwargs
+    ) -> dict:
+        if params is None:
+            params = {}
         url = f"{self.api_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
-        response = requests.get(url, headers=self.get_header(), **kwargs)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(
+                url, headers=self.get_header(), params=params, **kwargs
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error during GET call to API: {e} \n {response.text}")
 
-    def post(self, endpoint: str, data: dict | None = None, **kwargs) -> dict:
+        return None
+
+    def post(
+        self,
+        endpoint: str,
+        params: dict | None = None,
+        data: dict | None = None,
+        **kwargs,
+    ) -> dict:
         url = f"{self.api_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
-        response = requests.post(url, data=data, headers=self.get_header(), **kwargs)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.post(
+                url, params=params, json=data, headers=self.get_header(), **kwargs
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"Error during POST call to API: {e} \n {response.text}")
+
+        return None
 
     def upload(self, state: HR_State, bpm: int):
 
@@ -292,8 +319,6 @@ class DataUploader(QObject):
         if len(self.to_upload) >= self.upload_rate:
             self._upload()
 
-        self.to_upload.clear()
-
     def _upload(self) -> bool:
         # TODO: crear una función que suba los datos a la API y compruebe si todos se han subido correctamente,
         # el total de entradas introducidas en la API tiene que ser igual a la longitud de la lista de datos a subir
@@ -308,25 +333,34 @@ class DataUploader(QObject):
         if status.get("status", "") != "ok":
             return False
 
-        # Response Model:
-        # { "inserted": [1, 2, 3], "received": 1 }
         attempts = 0
         while len(self.to_upload) > 0 and attempts < self.retry_attempts:
-            data = {
-                "run_id": self.run_id,
-                "hearbeats": json.dumps(self.to_upload, HeartBeatEncoder),
-            }
-            try:
-                response = self.post(self.upload_endpoint, data=data)
+            data = [
+                {
+                    "device_timestamp": hb.device_timestamp.strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f"
+                    )[:-3]
+                    + "Z",
+                    "bpm": hb.bpm,
+                    "state": hb.state.value,
+                    "seq": hb.seq,
+                }
+                for hb in self.to_upload
+            ]
+            response = self.post(
+                self.upload_endpoint, params={"run_id": self.run_id}, data=data
+            )                
+            # Response Model:
+            # { "inserted": [1, 2, 3], "received": 1 }
+            if response is not None:
                 hb_uploaded: list[int] = response["inserted"]
-                print(type(hb_uploaded), hb_uploaded)
                 self.to_upload = [
                     item for item in self.to_upload if item.seq not in hb_uploaded
                 ]
-            except requests.RequestException as e:
-                logger.warning(f"Error uploading hearbeat: {e}")
-            finally:
-                attempts += 1
+            else:
+                logger.warning("Error uploading in function _upload()")
+
+            attempts += 1
 
         if len(self.to_upload) > 0:
             logger.warning(
@@ -348,34 +382,43 @@ class DataUploader(QObject):
 
 
 if __name__ == "__main__":
-    dotenv.load_dotenv("../.env")
+    dotenv.load_dotenv(
+        "/home/alf/Documents/Trabajos/TFMMAMEN/AplicacionExposicion/.env"
+    )
+    datauploader = DataUploader(Path(__file__).parent.parent / "pyproject.toml")
     dummy = [
         HeartBeat(
             device_timestamp=datetime.datetime.now(),
-            bpm=1,
+            bpm=100,
             state=HR_State.ESTRESADO,
             seq=1,
         ),
         HeartBeat(
             device_timestamp=datetime.datetime.now(),
-            bpm=123,
+            bpm=100,
             state=HR_State.ESTRESADO,
             seq=2,
         ),
         HeartBeat(
             device_timestamp=datetime.datetime.now(),
-            bpm=1278934,
+            bpm=100,
             state=HR_State.ESTRESADO,
             seq=3,
         ),
         HeartBeat(
             device_timestamp=datetime.datetime.now(),
-            bpm=23,
+            bpm=100,
             state=HR_State.ESTRESADO,
             seq=4,
         ),
     ]
-    print(json.dumps(dummy, cls=HeartBeatEncoder))
+
+    print(datauploader.upload_rate)
+    for h in dummy:
+        datauploader.upload(h.state, h.bpm)
+
+    print(datauploader.to_upload)
+    datauploader.stop()
 
     """dotenv.load_dotenv(str(Path(__file__).parent.parent / ".env"))
     uploader = DataUploader(Path(__file__).parent.parent / "pyproject.toml")
