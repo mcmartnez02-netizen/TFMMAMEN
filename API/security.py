@@ -62,6 +62,7 @@ def get_token(form_data:OAuth2PasswordRequestForm):
     )
     return Token(access_token=access_token, token_type="bearer")
 
+
 def verify_password(plain_password:str, hashed_password: SecretStr ):
     return password_hash.verify(plain_password, hashed_password.get_secret_value())
 

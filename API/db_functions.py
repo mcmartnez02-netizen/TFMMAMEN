@@ -172,7 +172,7 @@ def get_user_db(conn: sqlite3.Connection, username: str) -> UserInDB | None:
 
 def insert_heartbeats(
     conn: sqlite3.Connection, current_user: User, run_id: int, items: list[Heartbeat]
-) -> int:
+) -> list[int]:
     owner = get_run_owner(conn, run_id)
     if owner is None:
         raise LookupError("Run id was not registered yet")
@@ -181,17 +181,28 @@ def insert_heartbeats(
         raise PermissionError("User is not the owner of the uploaded run")
 
     entries = [{**dict(hb), "run_id": run_id} for hb in items]
+    seq_numbers = [e["seq"] for e in entries]
+
     with conn:
-        cursor = conn.executemany(
+        conn.executemany(
             """
                     INSERT OR IGNORE INTO heartbeats (run_id, seq, bpm, state, device_timestamp)
                     VALUES (:run_id, :seq, :bpm, :state, :device_timestamp)
                 """,
             entries,
         )
-        inserted = cursor.rowcount
 
-    return inserted
+        inserted_rows = conn.execute(
+            """
+                SELECT seq FROM heartbeats
+                WHERE run_id = :run_id AND seq IN ({})
+            """.format(",".join("?" * len(seq_numbers))),
+            [run_id] + seq_numbers,
+        ).fetchall()
+
+    inserted_seqs = [row[0] for row in inserted_rows]
+
+    return inserted_seqs
 
 
 def get_heartbeats(

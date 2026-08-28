@@ -119,7 +119,7 @@ def upload(
     conn: Annotated[sqlite3.Connection, Depends(db.get_conn)],
 ):
     try:
-        n = db.insert_heartbeats(conn, current_user, run_id, hb_items)
+        inserted = db.insert_heartbeats(conn, current_user, run_id, hb_items)
     except LookupError:
         raise HTTPException(
             status_code=404,
@@ -134,7 +134,7 @@ def upload(
                 user or reserve a new run at /new",
         )
 
-    return {"inserted": n, "received": len(hb_items)}
+    return {"inserted": inserted, "received": len(hb_items)}
 
 
 ###########################################

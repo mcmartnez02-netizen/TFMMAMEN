@@ -11,7 +11,7 @@ AplicacionExposicion/people_detection/yolo26n-pose_ncnn_model
 API/database/*.db
 API/database/default.db
 __pycache__
-API/__pycache__/
+API/__pycache__
 AplicacionExposicion/__pycache__/
 .vscode
 .claude
